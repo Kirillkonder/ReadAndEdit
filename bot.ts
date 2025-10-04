@@ -619,16 +619,7 @@ class AdminService {
         • Активных подписок: ${activeSubscriptions}
         • Администраторов: ${admins.length}
         
-        🛠️ <b>Действия:</b>
-        
-        Используйте команды:
-        /admin_users - Список всех пользователей
-        /admin_admins - Список администраторов
-        /admin_give_sub <user_id> <days> - Выдать подписку
-        /admin_remove_sub <user_id> - Удалить подписку
-        /admin_user_info <user_id> - Информация о пользователе
-        /admin_make_admin <user_id> - Сделать администратором
-        /admin_remove_admin <user_id> - Убрать администратора
+        🛠️ <b>Доступные действия:</b>
       `,
       {
         parse_mode: "HTML",
@@ -636,6 +627,10 @@ class AdminService {
           inline_keyboard: [
             [{ text: "📋 Список пользователей", callback_data: "admin_users" }],
             [{ text: "👑 Список администраторов", callback_data: "admin_admins" }],
+            [{ text: "💎 Выдать подписку", callback_data: "admin_give_sub_menu" }],
+            [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
+            [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
+            [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
             [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }]
           ]
         }
@@ -692,7 +687,105 @@ class AdminService {
         ]
       }
     });
-  } // <-- Закрывающая фигурна
+  }
+
+  async showGiveSubscriptionMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "💎 <b>Выдать подписку</b>\n\nВведите ID пользователя и количество дней через пробел:\n\nПример:\n<code>123456789 30</code> - выдать на 30 дней\n<code>123456789 -1</code> - вечная подписка",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async showRemoveSubscriptionMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "❌ <b>Удалить подписку</b>\n\nВведите ID пользователя:\n\nПример:\n<code>123456789</code>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async showUserInfoMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "👤 <b>Информация о пользователе</b>\n\nВведите ID пользователя:\n\nПример:\n<code>123456789</code>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async showManageAdminsMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "⚡ <b>Управление администраторами</b>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "👑 Назначить админа", callback_data: "admin_make_admin_menu" }],
+            [{ text: "❌ Снять админа", callback_data: "admin_remove_admin_menu" }],
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async showMakeAdminMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "👑 <b>Назначить администратора</b>\n\nВведите ID пользователя:\n\nПример:\n<code>123456789</code>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_manage_admins" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async showRemoveAdminMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "❌ <b>Снять администратора</b>\n\nВведите ID пользователя:\n\nПример:\n<code>123456789</code>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_manage_admins" }]
+          ]
+        }
+      }
+    );
+  }
 
   async giveSubscription(ctx: Context, userId: number, days: number): Promise<void> {
     if (!await this.isAdmin(ctx.from!.id)) return;
@@ -711,7 +804,14 @@ class AdminService {
           📅 Дней: ${days}
           🗓️ Действует до: ${expiresDate.toLocaleDateString('ru-RU')}
         `,
-        { parse_mode: "HTML" }
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
       );
     } catch (error) {
       await ctx.reply("❌ Ошибка при выдаче подписки. Пользователь не найден.");
@@ -729,7 +829,14 @@ class AdminService {
       
       await ctx.reply(
         `✅ Подписка удалена у пользователя ${user.firstName} (ID: ${user.userId})`,
-        { parse_mode: "HTML" }
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
       );
     } catch (error) {
       await ctx.reply("❌ Ошибка при удалении подписки. Пользователь не найден.");
@@ -803,7 +910,14 @@ class AdminService {
       
       await ctx.reply(
         `✅ Пользователь ${user.firstName} (ID: ${user.userId}) теперь администратор.`,
-        { parse_mode: "HTML" }
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
       );
     } catch (error: any) {
       if (error.message.includes("Cannot modify main administrator")) {
@@ -829,7 +943,14 @@ class AdminService {
       
       await ctx.reply(
         `✅ Пользователь ${user.firstName} (ID: ${user.userId}) больше не администратор.`,
-        { parse_mode: "HTML" }
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
       );
     } catch (error: any) {
       if (error.message.includes("Cannot remove main administrator")) {
@@ -1292,6 +1413,18 @@ async function handleCallbackQuery(ctx: Context) {
         await adminService.showAdminsList(ctx);
       } else if (data === 'admin_stats') {
         await adminService.showAdminPanel(ctx);
+      } else if (data === 'admin_give_sub_menu') {
+        await adminService.showGiveSubscriptionMenu(ctx);
+      } else if (data === 'admin_remove_sub_menu') {
+        await adminService.showRemoveSubscriptionMenu(ctx);
+      } else if (data === 'admin_user_info_menu') {
+        await adminService.showUserInfoMenu(ctx);
+      } else if (data === 'admin_manage_admins') {
+        await adminService.showManageAdminsMenu(ctx);
+      } else if (data === 'admin_make_admin_menu') {
+        await adminService.showMakeAdminMenu(ctx);
+      } else if (data === 'admin_remove_admin_menu') {
+        await adminService.showRemoveAdminMenu(ctx);
       } else if (data.startsWith('admin_give_')) {
         const parts = data.split('_');
         const days = parseInt(parts[2]);
@@ -1430,21 +1563,8 @@ class BotInstance {
   }
 
   private registerHandlers() {
+    // Оставляем только команду start
     this.bot.command("start", (ctx: Context) => this.startCommandHandler(ctx));
-    this.bot.command("donate", (ctx: Context) => this.donateCommandHandler(ctx));
-    this.bot.command("help", (ctx: Context) => this.helpCommandHandler(ctx));
-    this.bot.command("subscribe", (ctx: Context) => this.subscribeCommandHandler(ctx));
-    this.bot.command("mysub", (ctx: Context) => this.mySubscriptionHandler(ctx));
-    
-    // Админ команды - проверка доступа
-    this.bot.command("admin", (ctx: Context) => this.adminCommandHandler(ctx));
-    this.bot.command("admin_users", (ctx: Context) => this.adminUsersHandler(ctx));
-    this.bot.command("admin_admins", (ctx: Context) => this.adminAdminsHandler(ctx));
-    this.bot.command("admin_give_sub", (ctx: Context) => this.adminGiveSubHandler(ctx));
-    this.bot.command("admin_remove_sub", (ctx: Context) => this.adminRemoveSubHandler(ctx));
-    this.bot.command("admin_user_info", (ctx: Context) => this.adminUserInfoHandler(ctx));
-    this.bot.command("admin_make_admin", (ctx: Context) => this.adminMakeAdminHandler(ctx));
-    this.bot.command("admin_remove_admin", (ctx: Context) => this.adminRemoveAdminHandler(ctx));
     
     // Обработчик callback-запросов для кнопок
     this.bot.on("callback_query:data", handleCallbackQuery);
@@ -1500,16 +1620,32 @@ class BotInstance {
             2. Перейдите в <i>Telegram Business -> Чат-боты</i>
             3. Назначьте меня (@${botMe.username}) в качестве чат-бота
 
-            Используйте /help чтобы увидеть доступные команды в диалоге.
-            Используйте /mysub чтобы посмотреть статус подписки.
+            Используйте кнопки ниже для управления ботом:
           `;
 
           // Добавляем информацию об админ-панели только для админа
           if (await this.adminService.isAdmin(ctx.from.id)) {
-            welcomeText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>\nИспользуйте /admin для управления ботом';
+            welcomeText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
           }
 
-          await ctx.reply(welcomeText, { parse_mode: "HTML" });
+          const keyboard = [];
+          
+          if (await this.adminService.isAdmin(ctx.from.id)) {
+            keyboard.push([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
+          }
+          
+          keyboard.push(
+            [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
+            [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+            [{ text: "❓ Помощь", callback_data: "help" }]
+          );
+
+          await ctx.reply(welcomeText, { 
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: keyboard
+            }
+          });
         } else {
           await ctx.reply(
             dedent`
@@ -1522,14 +1658,22 @@ class BotInstance {
               💎 <b>Ежемесячная подписка</b>
               • 30 дней - 49 Stars
               
-              Используйте команду /subscribe для покупки подписки.
+              Используйте кнопку ниже для покупки подписки.
               
               После оплаты:
               1. Откройте настройки
               2. Перейдите в <i>Telegram Business -> Чат-боты</i>
               3. Назначьте меня (@${botMe.username}) в качестве чат-бота
             `,
-            { parse_mode: "HTML" }
+            { 
+              parse_mode: "HTML",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+                  [{ text: "❓ Помощь", callback_data: "help" }]
+                ]
+              }
+            }
           );
         }
       }
@@ -1537,186 +1681,6 @@ class BotInstance {
       console.error("Error in startCommandHandler:", error);
       await ctx.reply("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.");
     }
-  }
-
-  private async subscribeCommandHandler(ctx: Context) {
-    try {
-      await this.subscriptionService.sendSubscriptionInvoice(ctx);
-    } catch (error) {
-      console.error("Error in subscribeCommandHandler:", error);
-    }
-  }
-
-  private async mySubscriptionHandler(ctx: Context) {
-    try {
-      if (!ctx.from) return;
-
-      const user = await this.usersCollection.getUserById(ctx.from.id);
-      const hasActiveSubscription = await this.usersCollection.checkSubscription(ctx.from.id);
-
-      if (hasActiveSubscription && user.subscriptionExpires) {
-        const expiresDate = new Date(user.subscriptionExpires);
-        const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
-        
-        let subscriptionType = "Ежемесячный";
-        if (user.subscriptionTier === "admin_forever") {
-          subscriptionType = "👑 Вечная (Админ)";
-        } else if (user.subscriptionTier === "admin") {
-          subscriptionType = "⚡ Выданная админом";
-        }
-        
-        await ctx.reply(
-          dedent`
-            ✅ <b>Ваша подписка активна</b>
-            
-            💎 Тариф: ${subscriptionType}
-            📅 Действует до: ${expiresDate.toLocaleDateString('ru-RU')}
-            ⏳ Осталось дней: ${daysLeft}
-            
-            Спасибо за использование нашего бота! 🚀
-          `,
-          { parse_mode: "HTML" }
-        );
-      } else {
-        await ctx.reply(
-          dedent`
-            ❌ <b>Подписка не активна</b>
-            
-            Для использования бота необходимо приобрести подписку.
-            Используйте команду /subscribe для покупки подписки за 49 Stars.
-          `,
-          { parse_mode: "HTML" }
-        );
-      }
-    } catch (error) {
-      console.error("Error in mySubscriptionHandler:", error);
-    }
-  }
-
-  // Админ команды
-  private async adminCommandHandler(ctx: Context) {
-    await this.adminService.showAdminPanel(ctx);
-  }
-
-  private async adminUsersHandler(ctx: Context) {
-    await this.adminService.showUsersList(ctx);
-  }
-
-  private async adminAdminsHandler(ctx: Context) {
-    await this.adminService.showAdminsList(ctx);
-  }
-
-  private async adminGiveSubHandler(ctx: Context) {
-    if (!await this.adminService.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к этой команде.");
-      return;
-    }
-
-    const args = ctx.message?.text?.split(' ');
-    if (!args || args.length < 3) {
-      await ctx.reply(
-        "Использование: /admin_give_sub <user_id> <days>\n\nПример:\n/admin_give_sub 123456789 30 - выдать на 30 дней\n/admin_give_sub 123456789 -1 - вечная подписка"
-      );
-      return;
-    }
-
-    const userId = parseInt(args[1]);
-    const days = parseInt(args[2]);
-
-    if (isNaN(userId) || isNaN(days)) {
-      await ctx.reply("❌ Неверный формат. user_id и days должны быть числами.");
-      return;
-    }
-
-    await this.adminService.giveSubscription(ctx, userId, days);
-  }
-
-  private async adminRemoveSubHandler(ctx: Context) {
-    if (!await this.adminService.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к этой команде.");
-      return;
-    }
-
-    const args = ctx.message?.text?.split(' ');
-    if (!args || args.length < 2) {
-      await ctx.reply("Использование: /admin_remove_sub <user_id>");
-      return;
-    }
-
-    const userId = parseInt(args[1]);
-
-    if (isNaN(userId)) {
-      await ctx.reply("❌ Неверный формат. user_id должен быть числом.");
-      return;
-    }
-
-    await this.adminService.removeSubscription(ctx, userId);
-  }
-
-  private async adminUserInfoHandler(ctx: Context) {
-    if (!await this.adminService.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к этой команде.");
-      return;
-    }
-
-    const args = ctx.message?.text?.split(' ');
-    if (!args || args.length < 2) {
-      await ctx.reply("Использование: /admin_user_info <user_id>");
-      return;
-    }
-
-    const userId = parseInt(args[1]);
-
-    if (isNaN(userId)) {
-      await ctx.reply("❌ Неверный формат. user_id должен быть числом.");
-      return;
-    }
-
-    await this.adminService.showUserInfo(ctx, userId);
-  }
-
-  private async adminMakeAdminHandler(ctx: Context) {
-    if (!await this.adminService.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к этой команде.");
-      return;
-    }
-
-    const args = ctx.message?.text?.split(' ');
-    if (!args || args.length < 2) {
-      await ctx.reply("Использование: /admin_make_admin <user_id>");
-      return;
-    }
-
-    const userId = parseInt(args[1]);
-
-    if (isNaN(userId)) {
-      await ctx.reply("❌ Неверный формат. user_id должен быть числом.");
-      return;
-    }
-
-    await this.adminService.makeAdmin(ctx, userId);
-  }
-
-  private async adminRemoveAdminHandler(ctx: Context) {
-    if (!await this.adminService.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к этой команде.");
-      return;
-    }
-
-    const args = ctx.message?.text?.split(' ');
-    if (!args || args.length < 2) {
-      await ctx.reply("Использование: /admin_remove_admin <user_id>");
-      return;
-    }
-
-    const userId = parseInt(args[1]);
-
-    if (isNaN(userId)) {
-      await ctx.reply("❌ Неверный формат. user_id должен быть числом.");
-      return;
-    }
-
-    await this.adminService.removeAdmin(ctx, userId);
   }
 
   private async handlePreCheckoutQuery(ctx: Context) {
@@ -1745,74 +1709,22 @@ class BotInstance {
           2. Перейдите в <i>Telegram Business -> Чат-боты</i>
           3. Назначьте меня как чат-бота
           
-          Используйте /mysub чтобы посмотреть статус подписки.
+          Используйте кнопку "Моя подписка" чтобы посмотреть статус подписки.
         `,
-        { parse_mode: "HTML" }
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
+              [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+            ]
+          }
+        }
       );
 
     } catch (error) {
       console.error("Error handling successful payment:", error);
       await ctx.reply("Произошла ошибка при активации подписки. Пожалуйста, свяжитесь с поддержкой.");
-    }
-  }
-
-  private async donateCommandHandler(ctx: Context) {
-    try {
-      const donationAmountStr = ctx.match;
-      const donationAmount = Number(donationAmountStr);
-
-      if (isNaN(donationAmount) || donationAmount <= 1) {
-        await ctx.reply("Пожалуйста, укажите корректную сумму доната. Попробуйте снова.\n<code>/donate 25</code>", {
-          parse_mode: "HTML",
-        });
-        return;
-      }
-
-      if (ctx.chat) {
-        await ctx.api.sendInvoice(
-          ctx.chat.id,
-          "Донат боту",
-          "Поддержка бота",
-          "donation",
-          "XTR",
-          [{ label: "Поддержка бота", amount: donationAmount }]
-        );
-      }
-    } catch (error) {
-      console.error("Error in donateCommandHandler:", error);
-      await ctx.reply("Произошла ошибка при обработке вашего доната.");
-    }
-  }
-
-  private async helpCommandHandler(ctx: Context) {
-    try {
-      let helpText = dedent`
-        Доступные команды (используйте только в личных чатах):
-
-        <i><code>.listed_gifts</code> – Список всех подарков пользователя на Tonnel Marketplace.</i>
-        <i><code>.id</code> – Получить ID пользователя.</i>
-
-        Команды управления подпиской:
-        /subscribe - Купить подписку (49 Stars)
-        /mysub - Статус текущей подписки
-      `;
-
-      // Добавляем админские команды только если пользователь админ
-      if (await this.adminService.isAdmin(ctx.from!.id)) {
-        helpText += '\n\n👑 <b>Админ команды:</b>\n';
-        helpText += '/admin - Админ-панель\n';
-        helpText += '/admin_users - Список пользователей\n';
-        helpText += '/admin_admins - Список администраторов\n';
-        helpText += '/admin_give_sub - Выдать подписку\n';
-        helpText += '/admin_remove_sub - Удалить подписку\n';
-        helpText += '/admin_user_info - Информация о пользователе\n';
-        helpText += '/admin_make_admin - Сделать администратором\n';
-        helpText += '/admin_remove_admin - Убрать администратора';
-      }
-
-      await ctx.reply(helpText, { parse_mode: "HTML" });
-    } catch (error) {
-      console.error("Error in helpCommandHandler:", error);
     }
   }
 }
