@@ -631,7 +631,8 @@ class AdminService {
             [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
             [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
             [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
-            [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }]
+            [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
+            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
         }
       }
@@ -685,9 +686,10 @@ class AdminService {
         inline_keyboard: [
           [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
         ]
-      }
-    });
+      }}
+    );
   }
+
 
   async showGiveSubscriptionMenu(ctx: Context): Promise<void> {
     if (!await this.isAdmin(ctx.from!.id)) return;
@@ -1395,6 +1397,25 @@ async function handleCallbackQuery(ctx: Context) {
   const data = ctx.callbackQuery.data;
   
   try {
+    // Обработка основных кнопок
+    if (data === 'main_menu') {
+      await showMainMenu(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    } else if (data === 'my_subscription') {
+      await showMySubscription(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    } else if (data === 'buy_subscription') {
+      await buySubscription(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    } else if (data === 'help') {
+      await showHelp(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
     // Обработка админских callback-ов
     if (data.startsWith('admin_')) {
       const adminService = new AdminService();
@@ -1526,6 +1547,198 @@ async function handleCallbackQuery(ctx: Context) {
   }
 }
 
+// Функции для обработки основных кнопок
+async function showMainMenu(ctx: Context) {
+  const usersCollection = new UserRepository();
+  const adminService = new AdminService();
+  
+  if (!ctx.from) return;
+
+  const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
+  const isAdmin = await adminService.isAdmin(ctx.from.id);
+
+  let message = '';
+  if (hasActiveSubscription) {
+    message = dedent`
+      🏠 <b>Главное меню</b>
+      
+      ✅ <b>Ваша подписка активна!</b>
+      
+      Вы можете использовать все функции бота.
+    `;
+  } else {
+    message = dedent`
+      🏠 <b>Главное меню</b>
+      
+      ❌ <b>Требуется подписка</b>
+      
+      Для использования бота необходимо приобрести подписку.
+    `;
+  }
+
+  const keyboard = [];
+  
+  if (isAdmin) {
+    keyboard.push([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
+  }
+  
+  keyboard.push(
+    [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+    [{ text: "❓ Помощь", callback_data: "help" }]
+  );
+
+  try {
+    await ctx.editMessageText(message, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  } catch (error) {
+    await ctx.reply(message, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  }
+}
+
+async function showMySubscription(ctx: Context) {
+  const usersCollection = new UserRepository();
+  
+  if (!ctx.from) return;
+
+  try {
+    const user = await usersCollection.getUserById(ctx.from.id);
+    const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
+
+    if (hasActiveSubscription && user.subscriptionExpires) {
+      const expiresDate = new Date(user.subscriptionExpires);
+      const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
+      
+      let subscriptionType = "Ежемесячный";
+      if (user.subscriptionTier === "admin_forever") {
+        subscriptionType = "👑 Вечная (Админ)";
+      } else if (user.subscriptionTier === "admin") {
+        subscriptionType = "⚡ Выданная админом";
+      }
+      
+      await ctx.editMessageText(
+        dedent`
+          ✅ <b>Ваша подписка активна</b>
+          
+          💎 Тариф: ${subscriptionType}
+          📅 Действует до: ${expiresDate.toLocaleDateString('ru-RU')}
+          ⏳ Осталось дней: ${daysLeft}
+          
+          Спасибо за использование нашего бота! 🚀
+        `,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Продлить подписку", callback_data: "buy_subscription" }],
+              [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+            ]
+          }
+        }
+      );
+    } else {
+      await ctx.editMessageText(
+        dedent`
+          ❌ <b>Подписка не активна</b>
+          
+          Для использования бота необходимо приобрести подписку.
+          Используйте кнопку ниже для покупки подписки за 49 Stars.
+        `,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+              [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+            ]
+          }
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Error in showMySubscription:", error);
+    await ctx.answerCallbackQuery("Произошла ошибка");
+  }
+}
+
+async function buySubscription(ctx: Context) {
+  const subscriptionService = new SubscriptionService();
+  
+  try {
+    await subscriptionService.sendSubscriptionInvoice(ctx);
+    
+    // Добавляем кнопку назад после отправки инвойса
+    await ctx.reply(
+      "⬅️ <i>Вернуться в главное меню</i>",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    console.error("Error in buySubscription:", error);
+    await ctx.answerCallbackQuery("Произошла ошибка при создании платежа");
+  }
+}
+
+async function showHelp(ctx: Context) {
+  const adminService = new AdminService();
+  const isAdmin = await adminService.isAdmin(ctx.from!.id);
+
+  let helpText = dedent`
+    ❓ <b>Помощь</b>
+    
+    <b>Доступные команды в личных чатах:</b>
+    <i><code>.listed_gifts</code></i> – Список всех подарков пользователя на Tonnel Marketplace.
+    <i><code>.id</code></i> – Получить ID пользователя.
+
+    <b>Как настроить бота:</b>
+    1. Откройте настройки Telegram
+    2. Перейдите в <i>Telegram Business -> Чат-боты</i>
+    3. Назначьте меня как чат-бота
+
+    <b>Функции бота:</b>
+    • Уведомления об удаленных сообщениях
+    • Уведомления об edited сообщениях
+    • Мониторинг всех входящих сообщений
+  `;
+
+  if (isAdmin) {
+    helpText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
+  }
+
+  const keyboard = [
+    [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+    [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+  ];
+
+  if (isAdmin) {
+    keyboard.unshift([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
+  }
+
+  try {
+    await ctx.editMessageText(helpText, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  } catch (error) {
+    await ctx.reply(helpText, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  }
+}
+
 const updateHandlers: IUpdateHandler[] = [
   new BusinessMessageHandler(),
   new EditedBusinessMessageHandler(),
@@ -1607,75 +1820,7 @@ class BotInstance {
           await this.usersCollection.activateSubscription(ctx.from.id, -1, "admin_forever");
         }
 
-        const hasActiveSubscription = await this.usersCollection.checkSubscription(ctx.from.id);
-
-        if (hasActiveSubscription) {
-          let welcomeText = dedent`
-            Привет! Я бот, который уведомляет вас, если кто-то удаляет или редактирует сообщения в личных чатах.
-            
-            ✅ <b>Ваша подписка активна!</b>
-            
-            Инструкция по настройке:
-            1. Откройте настройки
-            2. Перейдите в <i>Telegram Business -> Чат-боты</i>
-            3. Назначьте меня (@${botMe.username}) в качестве чат-бота
-
-            Используйте кнопки ниже для управления ботом:
-          `;
-
-          // Добавляем информацию об админ-панели только для админа
-          if (await this.adminService.isAdmin(ctx.from.id)) {
-            welcomeText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
-          }
-
-          const keyboard = [];
-          
-          if (await this.adminService.isAdmin(ctx.from.id)) {
-            keyboard.push([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
-          }
-          
-          keyboard.push(
-            [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
-            [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
-            [{ text: "❓ Помощь", callback_data: "help" }]
-          );
-
-          await ctx.reply(welcomeText, { 
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: keyboard
-            }
-          });
-        } else {
-          await ctx.reply(
-            dedent`
-              Привет! Я бот, который уведомляет вас, если кто-то удаляет или редактирует сообщения в личных чатах.
-              
-              ❌ <b>Требуется подписка</b>
-              
-              Для использования бота необходимо приобрести подписку.
-              
-              💎 <b>Ежемесячная подписка</b>
-              • 30 дней - 49 Stars
-              
-              Используйте кнопку ниже для покупки подписки.
-              
-              После оплаты:
-              1. Откройте настройки
-              2. Перейдите в <i>Telegram Business -> Чат-боты</i>
-              3. Назначьте меня (@${botMe.username}) в качестве чат-бота
-            `,
-            { 
-              parse_mode: "HTML",
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
-                  [{ text: "❓ Помощь", callback_data: "help" }]
-                ]
-              }
-            }
-          );
-        }
+        await showMainMenu(ctx);
       }
     } catch (error: any) {
       console.error("Error in startCommandHandler:", error);
