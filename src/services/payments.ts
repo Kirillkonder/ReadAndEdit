@@ -1,43 +1,22 @@
-import { Context } from "grammy";
-import { UserRepository } from "../database/User/repository";
-import { getEnvVariable } from "../utils/getEnvVariable";
+import { UserRepository } from "../database/User";
 
-const ADMIN_ID = Number(getEnvVariable("ADMIN_ID") || 0);
-const userRepo = new UserRepository();
+export async function handleSuccessfulPayment(ctx: any) {
+  const userId = ctx.from.id;
+  const repo = new UserRepository();
 
-// Когда Телеграм присылает pre_checkout_query (перед оплатой)
-export async function handlePreCheckoutQuery(ctx: Context) {
-  try {
-    const query = (ctx.update as any).pre_checkout_query;
-    if (query && query.id) {
-      await ctx.api.answerPreCheckoutQuery(query.id, { ok: true });
-    }
-  } catch (err) {
-    console.error("Ошибка pre_checkout_query:", err);
-  }
-}
+  const paidUntil = Date.now() + 30 * 24 * 60 * 60 * 1000; // +30 дней
+  await repo.updateUserPayment(userId, paidUntil);
 
-// Когда оплата прошла успешно
-export async function handleSuccessfulPayment(ctx: Context) {
-  const payment = (ctx.message as any).successful_payment;
-  if (!payment) return;
+  await ctx.reply("✅ Оплата прошла успешно! Подписка активна на 30 дней 💎");
 
-  const from = ctx.from!;
-  const userId = from.id;
-  const now = Date.now();
-  const paidUntil = now + 30 * 24 * 60 * 60 * 1000; // +30 дней
-
-  try {
-    await userRepo.setAttribute(userId, "paidUntil", paidUntil);
-
-    await ctx.reply("✅ Спасибо! Доступ активирован на 30 дней.");
-
-    // Уведомляем админа
-    if (ADMIN_ID) {
-      const text = `💸 Пользователь @${from.username || "без_username"} (ID: ${userId}) оплатил подписку на месяц. Сумма: ${payment.total_amount} ⭐`;
-      await ctx.api.sendMessage(ADMIN_ID, text);
-    }
-  } catch (err) {
-    console.error("Ошибка при обработке successful_payment:", err);
+  // уведомление админу
+  const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
+  if (ADMIN_ID) {
+    await ctx.api.sendMessage(
+      ADMIN_ID,
+      `💰 Новый платёж!\nПользователь ${userId} оплатил подписку до ${new Date(
+        paidUntil
+      ).toLocaleString()}`
+    );
   }
 }

@@ -1,23 +1,20 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { Bot, Context } from "grammy";
+import { Bot, Context, InlineKeyboard } from "grammy";
 import dedent from "dedent";
 
 import { getEnvVariable } from "./utils/getEnvVariable";
 import { UserRepository, type IUserRepository } from "./database/User";
 import { updateHandlers } from "./updates";
 
-// === новые импорты ===
 import { subscribeCommand } from "./commands/subscribe";
 import { handlePreCheckoutQuery, handleSuccessfulPayment } from "./services/payments";
-// ======================
+import { showAdminPanel } from "./commands/adminPanel";
 
 export default class BotInstance {
   private bot: Bot = new Bot(getEnvVariable("BOT_TOKEN"));
   private usersCollection: IUserRepository = new UserRepository();
-
-  constructor() {}
 
   public async run() {
     this.registerHandlers();
@@ -26,7 +23,6 @@ export default class BotInstance {
     });
   }
 
-  // 👇👇 вот тут все команды и обработчики
   private registerHandlers() {
     // --- стандартные команды ---
     this.bot.command("start", (ctx: Context) => this.startCommandHandler(ctx));
@@ -43,8 +39,7 @@ export default class BotInstance {
       );
     });
 
-    // --- 🔥 добавляем подписку и платежи Telegram Stars / XTR ---
-    // Команда /subscribe — покупка подписки
+    // --- подписка и платежи Telegram Stars ---
     this.bot.command("subscribe", async (ctx) => {
       if (!ctx.chat || ctx.chat.type !== "private") {
         return ctx.reply("Используй эту команду только в личном чате с ботом.");
@@ -52,45 +47,23 @@ export default class BotInstance {
       await subscribeCommand(ctx as any);
     });
 
-    // pre_checkout_query (Telegram присылает перед оплатой)
     this.bot.on("pre_checkout_query", async (ctx) => {
       await handlePreCheckoutQuery(ctx as any);
     });
 
-    // успешная оплата (Telegram присылает вместе с message)
     this.bot.on("message", async (ctx) => {
       if ((ctx.message as any).successful_payment) {
         await handleSuccessfulPayment(ctx as any);
       }
     });
 
-    // Команда /ispaid <id> — только для админа
-    this.bot.command("ispaid", async (ctx) => {
-      const fromId = ctx.from?.id;
+    // --- ⚙️ Админ-панель ---
+    this.bot.command("admin", async (ctx) => {
       const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
-      if (fromId !== ADMIN_ID) {
+      if (ctx.from?.id !== ADMIN_ID)
         return ctx.reply("❌ Только админ может использовать эту команду.");
-      }
 
-      const parts = ctx.message?.text?.split(" ");
-      if (!parts || !parts[1])
-        return ctx.reply("Использование: /ispaid <userId>");
-
-      const userId = Number(parts[1]);
-      const repo = new (await import("./database/User/repository")).UserRepository();
-
-      try {
-        const user = await repo.getUserById(userId);
-        const paidUntil = (user as any).paidUntil || 0;
-        const active = paidUntil > Date.now();
-        await ctx.reply(
-          `🧾 Пользователь ${userId}\nСтатус: ${
-            active ? "✅ Активен" : "❌ Неактивен"
-          }\nОплачен до: ${new Date(paidUntil).toLocaleString()}`
-        );
-      } catch {
-        await ctx.reply("Пользователь не найден.");
-      }
+      await showAdminPanel(ctx as any);
     });
   }
 
@@ -108,6 +81,15 @@ export default class BotInstance {
           username: ctx.from.username,
         });
 
+        const keyboard = new InlineKeyboard()
+          .text("💎 Оплатить подписку", "pay")
+          .row();
+
+        const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
+        if (ctx.from.id === ADMIN_ID) {
+          keyboard.text("⚙️ Админ-панель", "admin_panel");
+        }
+
         await ctx.reply(
           dedent`
             Привет! 👋  
@@ -120,8 +102,21 @@ export default class BotInstance {
 
             Используй /help чтобы увидеть команды.
           `,
-          { parse_mode: "HTML" }
+          {
+            parse_mode: "HTML",
+            reply_markup: keyboard,
+          }
         );
+
+        // обработка кнопок
+        this.bot.callbackQuery("pay", async (cbCtx) => {
+          await subscribeCommand(cbCtx as any);
+        });
+
+        this.bot.callbackQuery("admin_panel", async (cbCtx) => {
+          await showAdminPanel(cbCtx as any);
+        });
+
       } catch (error: any) {
         console.error("Ошибка в startCommandHandler:", error);
         await ctx.reply("Произошла ошибка. Попробуйте позже.");
@@ -136,7 +131,7 @@ export default class BotInstance {
 
         /start — начать работу  
         /subscribe — оплатить подписку (75⭐ / месяц)  
-        /ispaid <id> — (только админ) проверить оплату  
+        /admin — админ-панель  
         /help — показать помощь
       `,
       { parse_mode: "HTML" }
