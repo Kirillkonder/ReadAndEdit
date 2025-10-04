@@ -1,7 +1,7 @@
 {
   "name": "bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "A Telegram bot that notifies you when someone edits or deletes messages in your private conversations.",
   "main": "index.js",
   "scripts": {
     "start": "node dist/index.js",
@@ -13,15 +13,26 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@types/node": "^22.15.21",
+    "@types/node": "^22.18.8",
     "esbuild": "^0.25.4",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "dedent": "^1.5.3",
-    "dotenv": "^16.4.7",
-    "grammy": "^1.36.3",
-    "mongodb": "^6.15.0"
-  }
+    "dedent": "^1.7.0",
+    "dotenv": "^16.6.1",
+    "grammy": "^1.38.3",
+    "mongodb": "^6.20.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kirillkonder/ReadAndEdit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kirillkonder/ReadAndEdit/issues"
+  },
+  "homepage": "https://github.com/Kirillkonder/ReadAndEdit#readme"
 }
