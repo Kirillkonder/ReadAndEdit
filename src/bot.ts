@@ -7,7 +7,6 @@ import dedent from "dedent";
 import { getEnvVariable } from "./utils/getEnvVariable";
 import { UserRepository, type IUserRepository } from "./database/User";
 import { updateHandlers } from "./updates";
-
 import { subscribeCommand } from "./commands/subscribe";
 import { handlePreCheckoutQuery, handleSuccessfulPayment } from "./services/payments";
 import { showAdminPanel } from "./commands/adminPanel";
@@ -25,28 +24,17 @@ export default class BotInstance {
 
   private registerHandlers() {
     // --- стандартные команды ---
-    this.bot.command("start", (ctx: Context) => this.startCommandHandler(ctx));
-    this.bot.command("help", (ctx: Context) => this.helpCommandHandler(ctx));
-    this.bot.command("donate", (ctx: Context) => this.donateCommandHandler(ctx));
+    this.bot.command("start", (ctx) => this.startCommandHandler(ctx));
+    this.bot.command("help", (ctx) => this.helpCommandHandler(ctx));
+    this.bot.command("donate", (ctx) => this.donateCommandHandler(ctx));
 
-    // --- обработчики из updates (твои уже существующие) ---
+    // --- обновления (если у тебя есть другие middleware) ---
     updateHandlers.forEach((handler) => {
       const middlewares = handler.middlewares ?? [];
-      this.bot.on(
-        handler.updateName,
-        ...middlewares,
-        async (ctx: Context) => handler.run(ctx)
-      );
+      this.bot.on(handler.updateName, ...middlewares, async (ctx) => handler.run(ctx));
     });
 
-    // --- подписка и платежи Telegram Stars ---
-    this.bot.command("subscribe", async (ctx) => {
-      if (!ctx.chat || ctx.chat.type !== "private") {
-        return ctx.reply("Используй эту команду только в личном чате с ботом.");
-      }
-      await subscribeCommand(ctx as any);
-    });
-
+    // --- обработчики Telegram Stars оплаты ---
     this.bot.on("pre_checkout_query", async (ctx) => {
       await handlePreCheckoutQuery(ctx as any);
     });
@@ -57,7 +45,15 @@ export default class BotInstance {
       }
     });
 
-    // --- ⚙️ Админ-панель ---
+    // --- ⚙️ Команда /subscribe ---
+    this.bot.command("subscribe", async (ctx) => {
+      if (!ctx.chat || ctx.chat.type !== "private") {
+        return ctx.reply("Используй эту команду только в личном чате с ботом.");
+      }
+      await subscribeCommand(ctx as any);
+    });
+
+    // --- ⚙️ Команда /admin ---
     this.bot.command("admin", async (ctx) => {
       const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
       if (ctx.from?.id !== ADMIN_ID)
@@ -65,62 +61,80 @@ export default class BotInstance {
 
       await showAdminPanel(ctx as any);
     });
+
+    // --- 💎 Callback-кнопки ---
+    this.bot.callbackQuery("pay", async (cbCtx) => {
+      try {
+        console.log("[callback] pay pressed by", cbCtx.from?.id);
+        await cbCtx.answerCallbackQuery({ text: "Открываю оплату...", show_alert: false });
+        await subscribeCommand(cbCtx as any);
+      } catch (err) {
+        console.error("callback 'pay' error:", err);
+        try {
+          await cbCtx.answerCallbackQuery({ text: "Ошибка при открытии оплаты", show_alert: true });
+        } catch {}
+      }
+    });
+
+    this.bot.callbackQuery("admin_panel", async (cbCtx) => {
+      try {
+        console.log("[callback] admin_panel pressed by", cbCtx.from?.id);
+        await cbCtx.answerCallbackQuery();
+        await showAdminPanel(cbCtx as any);
+      } catch (err) {
+        console.error("callback 'admin_panel' error:", err);
+        try {
+          await cbCtx.answerCallbackQuery({ text: "Ошибка отображения панели", show_alert: true });
+        } catch {}
+      }
+    });
   }
 
-  // ===== стандартные методы команд =====
+  // ========================== Команды ==========================
 
   private async startCommandHandler(ctx: Context) {
-    if (ctx.from) {
-      try {
-        const botMe = await ctx.api.getMe();
+    if (!ctx.from) return;
 
-        await this.usersCollection.create({
-          userId: ctx.from.id,
-          firstName: ctx.from.first_name,
-          lastName: ctx.from.last_name,
-          username: ctx.from.username,
-        });
+    try {
+      const botMe = await ctx.api.getMe();
 
-        const keyboard = new InlineKeyboard()
-          .text("💎 Оплатить подписку", "pay")
-          .row();
+      await this.usersCollection.create({
+        userId: ctx.from.id,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+        username: ctx.from.username,
+      });
 
-        const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
-        if (ctx.from.id === ADMIN_ID) {
-          keyboard.text("⚙️ Админ-панель", "admin_panel");
-        }
+      const keyboard = new InlineKeyboard()
+        .text("💎 Оплатить подписку", "pay")
+        .row();
 
-        await ctx.reply(
-          dedent`
-            Привет! 👋  
-            Я бот, который уведомляет, если кто-то удалил или изменил сообщение в чате.
-
-            ⚙️ Чтобы подключить меня:
-            1. Открой настройки Telegram Business
-            2. Перейди в <i>Chatbots</i>
-            3. Добавь меня (@${botMe.username}) как чат-бота
-
-            Используй /help чтобы увидеть команды.
-          `,
-          {
-            parse_mode: "HTML",
-            reply_markup: keyboard,
-          }
-        );
-
-        // обработка кнопок
-        this.bot.callbackQuery("pay", async (cbCtx) => {
-          await subscribeCommand(cbCtx as any);
-        });
-
-        this.bot.callbackQuery("admin_panel", async (cbCtx) => {
-          await showAdminPanel(cbCtx as any);
-        });
-
-      } catch (error: any) {
-        console.error("Ошибка в startCommandHandler:", error);
-        await ctx.reply("Произошла ошибка. Попробуйте позже.");
+      const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
+      if (ctx.from.id === ADMIN_ID) {
+        keyboard.text("⚙️ Админ-панель", "admin_panel");
       }
+
+      await ctx.reply(
+        dedent`
+          Привет! 👋  
+          Я бот, который уведомляет, если кто-то удалил или изменил сообщение в чате.
+
+          ⚙️ Чтобы подключить меня:
+          1. Открой настройки Telegram Business  
+          2. Перейди в <i>Chatbots</i>  
+          3. Добавь меня (@${botMe.username}) как чат-бота
+
+          💎 Используй /subscribe чтобы оплатить подписку.  
+          📘 /help — список команд.
+        `,
+        {
+          parse_mode: "HTML",
+          reply_markup: keyboard,
+        }
+      );
+    } catch (error) {
+      console.error("Ошибка в startCommandHandler:", error);
+      await ctx.reply("Произошла ошибка. Попробуйте позже.");
     }
   }
 
@@ -131,7 +145,7 @@ export default class BotInstance {
 
         /start — начать работу  
         /subscribe — оплатить подписку (75⭐ / месяц)  
-        /admin — админ-панель  
+        /admin — админ-панель (только для администратора)  
         /help — показать помощь
       `,
       { parse_mode: "HTML" }

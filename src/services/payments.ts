@@ -1,22 +1,43 @@
+import { Context } from "grammy";
 import { UserRepository } from "../database/User";
 
-export async function handleSuccessfulPayment(ctx: any) {
-  const userId = ctx.from.id;
-  const repo = new UserRepository();
+/**
+ * ✅ Обработка pre_checkout_query (Telegram Stars перед оплатой)
+ */
+export async function handlePreCheckoutQuery(ctx: Context) {
+  try {
+    await ctx.answerPreCheckoutQuery(true);
+    console.log("✅ PreCheckoutQuery успешно подтвержден от", ctx.from?.id);
+  } catch (error) {
+    console.error("❌ Ошибка в handlePreCheckoutQuery:", error);
+    await ctx.answerPreCheckoutQuery(false, {
+      error_message: "Ошибка при обработке оплаты. Попробуйте позже.",
+    });
+  }
+}
 
-  const paidUntil = Date.now() + 30 * 24 * 60 * 60 * 1000; // +30 дней
-  await repo.updateUserPayment(userId, paidUntil);
+/**
+ * ✅ Обработка успешной оплаты (successful_payment)
+ */
+export async function handleSuccessfulPayment(ctx: Context) {
+  try {
+    const userId = ctx.from?.id;
+    if (!userId) return;
 
-  await ctx.reply("✅ Оплата прошла успешно! Подписка активна на 30 дней 💎");
+    const userRepo = new UserRepository();
 
-  // уведомление админу
-  const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
-  if (ADMIN_ID) {
-    await ctx.api.sendMessage(
-      ADMIN_ID,
-      `💰 Новый платёж!\nПользователь ${userId} оплатил подписку до ${new Date(
-        paidUntil
-      ).toLocaleString()}`
+    // Устанавливаем срок подписки на 30 дней
+    const paidUntil = Date.now() + 1000 * 60 * 60 * 24 * 30;
+
+    await userRepo.updateUser(userId, { paidUntil });
+
+    await ctx.reply(
+      "💎 Оплата получена! Ваша подписка активна на 30 дней.\nСпасибо за поддержку ❤️"
     );
+
+    console.log(`✅ Пользователь ${userId} оплатил подписку до ${new Date(paidUntil).toLocaleString()}`);
+  } catch (error) {
+    console.error("❌ Ошибка в handleSuccessfulPayment:", error);
+    await ctx.reply("Ошибка при обработке оплаты. Попробуйте позже.");
   }
 }
