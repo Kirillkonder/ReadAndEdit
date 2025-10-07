@@ -7,7 +7,7 @@ import dedent from "dedent";
 import { UserRepository, IUserRepository } from './database';
 import { AdminService, SubscriptionService } from './services';
 import { updateHandlers } from "./handlers";
-import { handleCallbackQuery, showMainMenu } from './ui';
+import { handleCallbackQuery, showMainMenu, showWelcomeMessage } from './ui';
 
 // Main Bot Class
 class BotInstance {
@@ -69,33 +69,84 @@ class BotInstance {
   }
 
   private async startCommandHandler(ctx: Context) {
-    try {
-      if (ctx.from) {
-        const botMe = await ctx.api.getMe();
-        const userId = ctx.from.id;
+  try {
+    if (ctx.from) {
+      const botMe = await ctx.api.getMe();
+      const userId = ctx.from.id;
+      
+      // Проверяем, существует ли пользователь
+      const userExists = await this.usersCollection.exists(userId);
+
+      await this.usersCollection.create({
+        userId: ctx.from.id,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name || "",
+        username: ctx.from.username || "",
+      });
+
+      // Обработка реферальной ссылки
+      const startPayload = ctx.match; // Получаем параметр из ссылки
+      
+      if (startPayload && typeof startPayload === 'string' && startPayload.startsWith('ref_')) {
+        const referrerId = parseInt(startPayload.replace('ref_', ''));
         
-        // Проверяем, существует ли пользователь
-        const userExists = await this.usersCollection.exists(userId);
-
-        await this.usersCollection.create({
-          userId: ctx.from.id,
-          firstName: ctx.from.first_name,
-          lastName: ctx.from.last_name || "",
-          username: ctx.from.username || "",
-        });
-
-        // Активируем вечную подписку только для админа
-        if (await this.adminService.isAdmin(ctx.from.id)) {
-          await this.usersCollection.activateSubscription(ctx.from.id, -1, "admin_forever");
+        if (referrerId && referrerId !== userId) {
+          try {
+            const referrer = await this.usersCollection.getUserById(referrerId);
+            
+            // Устанавливаем кто пригласил
+            await this.usersCollection.setReferredBy(userId, referrerId);
+            
+            // Увеличиваем счетчик рефералов
+            await this.usersCollection.incrementReferralCount(referrerId);
+            
+            // Получаем обновленные данные реферера
+            const updatedReferrer = await this.usersCollection.getUserById(referrerId);
+            const newCount = updatedReferrer.referralCount;
+            
+            // Начисляем бонусы в зависимости от количества рефералов
+            let bonusDays = 0;
+            if (newCount === 3) {
+              bonusDays = 7;
+            } else if (newCount === 5) {
+              bonusDays = 30;
+            } else if (newCount === 10) {
+              bonusDays = 180;
+            } else if (newCount === 30) {
+              bonusDays = -1; // вечная подписка
+            }
+            
+            if (bonusDays !== 0) {
+              await this.usersCollection.activateSubscription(referrerId, bonusDays, "referral");
+              
+              // Уведомляем реферера о бонусе
+              const bonusText = bonusDays === -1 ? "вечную подписку" : `${bonusDays} дней`;
+              await ctx.api.sendMessage(
+                referrerId,
+                `🎉 Поздравляем! Вы пригласили ${newCount} пользователей и получаете ${bonusText} подписки в подарок!`,
+                { parse_mode: "HTML" }
+              );
+            }
+            
+          } catch (error) {
+            console.log("Referrer not found or error processing referral:", error);
+          }
         }
-
-        await showMainMenu(ctx);
       }
-    } catch (error: any) {
-      console.error("Error in startCommandHandler:", error);
-      await ctx.reply("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.");
+
+      // Активируем вечную подписку только для админа
+      if (await this.adminService.isAdmin(ctx.from.id)) {
+        await this.usersCollection.activateSubscription(ctx.from.id, -1, "admin_forever");
+      }
+
+      // Отправляем приветственное сообщение
+      await showWelcomeMessage(ctx);
     }
+  } catch (error: any) {
+    console.error("Error in startCommandHandler:", error);
+    await ctx.reply("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.");
   }
+}
 
   private async handlePreCheckoutQuery(ctx: Context) {
     try {

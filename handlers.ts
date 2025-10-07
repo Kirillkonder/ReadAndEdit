@@ -411,4 +411,4 @@ export const updateHandlers: IUpdateHandler[] = [
   new DeletedBusinessMessageHandler(),
   new BusinessConnectionHandler(),
   new BusinessImageMessageHandler()
-];
+]

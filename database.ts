@@ -26,21 +26,24 @@ export class SQLiteDatabase {
   private async createTables(): Promise<void> {
     // Создаем таблицу users
     await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        userId INTEGER PRIMARY KEY,
-        firstName TEXT NOT NULL,
-        lastName TEXT,
-        username TEXT,
-        createdAt INTEGER NOT NULL,
-        lastReceiveMessageAt INTEGER,
-        subscriptionActive INTEGER DEFAULT 0,
-        subscriptionExpires INTEGER,
-        subscriptionTier TEXT DEFAULT 'free',
-        isAdmin INTEGER DEFAULT 0,
-        trialUsed INTEGER DEFAULT 0,
-        giftBoomBonusUsed INTEGER DEFAULT 0
-      )
-    `);
+    CREATE TABLE IF NOT EXISTS users (
+    userId INTEGER PRIMARY KEY,
+    firstName TEXT NOT NULL,
+    lastName TEXT,
+    username TEXT,
+    createdAt INTEGER NOT NULL,
+    lastReceiveMessageAt INTEGER,
+    subscriptionActive INTEGER DEFAULT 0,
+    subscriptionExpires INTEGER,
+    subscriptionTier TEXT DEFAULT 'free',
+    isAdmin INTEGER DEFAULT 0,
+    trialUsed INTEGER DEFAULT 0,
+    giftBoomBonusUsed INTEGER DEFAULT 0,
+    referredBy INTEGER,
+    referralCount INTEGER DEFAULT 0,
+    referralLink TEXT
+  )
+`);
 
     // Создаем таблицу messages с проверкой существующих столбцов
     await this.db.exec(`
@@ -154,8 +157,12 @@ export interface IUser {
   isAdmin: boolean;
   trialUsed: boolean;
   giftBoomBonusUsed: boolean;
+  
+  // ДОБАВЬ ЭТИ ПОЛЯ ДЛЯ РЕФЕРАЛЬНОЙ СИСТЕМЫ:
+  referredBy?: number;
+  referralCount: number;
+  referralLink?: string;
 }
-
 export interface CreateUserDto {
   userId: number;
   firstName: string;
@@ -178,8 +185,13 @@ export interface IUserRepository {
   isAdmin(userId: number): Promise<boolean>;
   hasUsedGiftBoomBonus(userId: number): Promise<boolean>;
   markGiftBoomBonusUsed(userId: number): Promise<void>;
+  
+  // ДОБАВЬ ЭТИ МЕТОДЫ ДЛЯ РЕФЕРАЛЬНОЙ СИСТЕМЫ:
+  setReferredBy(userId: number, referrerId: number): Promise<void>;
+  incrementReferralCount(userId: number): Promise<void>;
+  setReferralLink(userId: number, link: string): Promise<void>;
+  getUserByReferralLink(link: string): Promise<IUser | null>;
 }
-
 export interface IMessage {
   messageId: number;
   text: string;
@@ -233,66 +245,70 @@ export class UserRepository implements IUserRepository {
     }
   }
   
-  public async create(userData: CreateUserDto): Promise<void> {
-    const database = await this.db.connect();
+ public async create(userData: CreateUserDto): Promise<void> {
+  const database = await this.db.connect();
+  
+  const userExists = await this.exists(userData.userId, false);
+  if (!userExists) {
+    // Автоматически делаем главного администратора админом
+    const isAdmin = userData.userId === MAIN_ADMIN_ID ? 1 : 0;
     
-    const userExists = await this.exists(userData.userId, false);
-    if (!userExists) {
-      // Автоматически делаем главного администратора админом
-      const isAdmin = userData.userId === MAIN_ADMIN_ID ? 1 : 0;
-      
-      await database.run(
-        `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0]
-      );
-      console.log(`User ${userData.userId} created successfully`);
-    } else {
-      console.log(`User ${userData.userId} already exists`);
-    }
+    await database.run(
+      `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed, referralCount) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0, 0]
+    );
+    console.log(`User ${userData.userId} created successfully`);
+  } else {
+    console.log(`User ${userData.userId} already exists`);
   }
+}
 
-  public async createOrUpdate(userData: CreateUserDto): Promise<void> {
-    const database = await this.db.connect();
-    
-    const userExists = await this.exists(userData.userId, false);
-    if (!userExists) {
-      await this.create(userData);
-    } else {
-      // Update user info if needed
-      await database.run(
-        `UPDATE users SET firstName = ?, lastName = ?, username = ? WHERE userId = ?`,
-        [userData.firstName, userData.lastName || null, userData.username || null, userData.userId]
-      );
-    }
+ public async createOrUpdate(userData: CreateUserDto): Promise<void> {
+  const database = await this.db.connect();
+  
+  const userExists = await this.exists(userData.userId, false);
+  if (!userExists) {
+    await this.create(userData);
+  } else {
+    // Update user info if needed
+    await database.run(
+      `UPDATE users SET firstName = ?, lastName = ?, username = ? WHERE userId = ?`,
+      [userData.firstName, userData.lastName || null, userData.username || null, userData.userId]
+    );
   }
+}
 
   public async getUserById(userId: number): Promise<IUser> {
-    const database = await this.db.connect();
-    const user = await database.get(
-      'SELECT * FROM users WHERE userId = ?', 
-      userId
-    );
-    
-    if (!user) {
-      throw new Error(`User with id ${userId} does not exist`);
-    }
-
-    return {
-      userId: user.userId,
-      firstName: user.firstName,
-      lastName: user.lastName || undefined,
-      username: user.username || undefined,
-      createdAt: user.createdAt,
-      lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
-      subscriptionActive: !!user.subscriptionActive,
-      subscriptionExpires: user.subscriptionExpires || undefined,
-      subscriptionTier: user.subscriptionTier || 'free',
-      isAdmin: !!user.isAdmin,
-      trialUsed: !!user.trialUsed,
-      giftBoomBonusUsed: !!user.giftBoomBonusUsed
-    };
+  const database = await this.db.connect();
+  const user = await database.get(
+    'SELECT * FROM users WHERE userId = ?', 
+    userId
+  );
+  
+  if (!user) {
+    throw new Error(`User with id ${userId} does not exist`);
   }
+
+  return {
+    userId: user.userId,
+    firstName: user.firstName,
+    lastName: user.lastName || undefined,
+    username: user.username || undefined,
+    createdAt: user.createdAt,
+    lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
+    subscriptionActive: !!user.subscriptionActive,
+    subscriptionExpires: user.subscriptionExpires || undefined,
+    subscriptionTier: user.subscriptionTier || 'free',
+    isAdmin: !!user.isAdmin,
+    trialUsed: !!user.trialUsed,
+    giftBoomBonusUsed: !!user.giftBoomBonusUsed,
+    // ДОБАВЬ ЭТИ ПОЛЯ:
+    referredBy: user.referredBy || undefined,
+    referralCount: user.referralCount || 0,
+    referralLink: user.referralLink || undefined
+  };
+}
 
   public async setAttribute(userId: number, key: string, value: any, returnResult: boolean = false): Promise<IUser | void> {
     const userExists = await this.exists(userId, false);
@@ -382,45 +398,53 @@ export class UserRepository implements IUserRepository {
     await this.setAttribute(userId, 'giftBoomBonusUsed', 1);
   }
 
-  public async getAllUsers(): Promise<IUser[]> {
-    const database = await this.db.connect();
-    const users = await database.all('SELECT * FROM users ORDER BY createdAt DESC');
-    
-    return users.map((user: any) => ({
-      userId: user.userId,
-      firstName: user.firstName,
-      lastName: user.lastName || undefined,
-      username: user.username || undefined,
-      createdAt: user.createdAt,
-      lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
-      subscriptionActive: !!user.subscriptionActive,
-      subscriptionExpires: user.subscriptionExpires || undefined,
-      subscriptionTier: user.subscriptionTier || 'free',
-      isAdmin: !!user.isAdmin,
-      trialUsed: !!user.trialUsed,
-      giftBoomBonusUsed: !!user.giftBoomBonusUsed
-    }));
-  }
+ public async getAllUsers(): Promise<IUser[]> {
+  const database = await this.db.connect();
+  const users = await database.all('SELECT * FROM users ORDER BY createdAt DESC');
+  
+  return users.map((user: any) => ({
+    userId: user.userId,
+    firstName: user.firstName,
+    lastName: user.lastName || undefined,
+    username: user.username || undefined,
+    createdAt: user.createdAt,
+    lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
+    subscriptionActive: !!user.subscriptionActive,
+    subscriptionExpires: user.subscriptionExpires || undefined,
+    subscriptionTier: user.subscriptionTier || 'free',
+    isAdmin: !!user.isAdmin,
+    trialUsed: !!user.trialUsed,
+    giftBoomBonusUsed: !!user.giftBoomBonusUsed,
+    // ДОБАВЬ ЭТИ ПОЛЯ:
+    referredBy: user.referredBy || undefined,
+    referralCount: user.referralCount || 0,
+    referralLink: user.referralLink || undefined
+  }));
+}
 
   public async getAllAdmins(): Promise<IUser[]> {
-    const database = await this.db.connect();
-    const admins = await database.all('SELECT * FROM users WHERE isAdmin = 1 ORDER BY createdAt DESC');
-    
-    return admins.map((user: any) => ({
-      userId: user.userId,
-      firstName: user.firstName,
-      lastName: user.lastName || undefined,
-      username: user.username || undefined,
-      createdAt: user.createdAt,
-      lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
-      subscriptionActive: !!user.subscriptionActive,
-      subscriptionExpires: user.subscriptionExpires || undefined,
-      subscriptionTier: user.subscriptionTier || 'free',
-      isAdmin: !!user.isAdmin,
-      trialUsed: !!user.trialUsed,
-      giftBoomBonusUsed: !!user.giftBoomBonusUsed
-    }));
-  }
+  const database = await this.db.connect();
+  const admins = await database.all('SELECT * FROM users WHERE isAdmin = 1 ORDER BY createdAt DESC');
+  
+  return admins.map((user: any) => ({
+    userId: user.userId,
+    firstName: user.firstName,
+    lastName: user.lastName || undefined,
+    username: user.username || undefined,
+    createdAt: user.createdAt,
+    lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
+    subscriptionActive: !!user.subscriptionActive,
+    subscriptionExpires: user.subscriptionExpires || undefined,
+    subscriptionTier: user.subscriptionTier || 'free',
+    isAdmin: !!user.isAdmin,
+    trialUsed: !!user.trialUsed,
+    giftBoomBonusUsed: !!user.giftBoomBonusUsed,
+    // ДОБАВЬ ЭТИ ПОЛЯ:
+    referredBy: user.referredBy || undefined,
+    referralCount: user.referralCount || 0,
+    referralLink: user.referralLink || undefined
+  }));
+}
 
   public async makeAdmin(userId: number): Promise<void> {
     // Главного администратора нельзя изменить
@@ -452,6 +476,49 @@ export class UserRepository implements IUserRepository {
       return false;
     }
   }
+
+   public async getUserByReferralLink(link: string): Promise<IUser | null> {
+    const database = await this.db.connect();
+    const user = await database.get('SELECT * FROM users WHERE referralLink = ?', link);
+    return user ? this.mapUser(user) : null;
+  }
+
+  public async incrementReferralCount(userId: number): Promise<void> {
+    const database = await this.db.connect();
+    await database.run(
+      'UPDATE users SET referralCount = referralCount + 1 WHERE userId = ?',
+      [userId]
+    );
+  }
+
+  public async setReferralLink(userId: number, link: string): Promise<void> {
+    await this.setAttribute(userId, 'referralLink', link);
+  }
+
+  public async setReferredBy(userId: number, referrerId: number): Promise<void> {
+    await this.setAttribute(userId, 'referredBy', referrerId);
+  }
+
+  private mapUser(user: any): IUser {
+    return {
+      userId: user.userId,
+      firstName: user.firstName,
+      lastName: user.lastName || undefined,
+      username: user.username || undefined,
+      createdAt: user.createdAt,
+      lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
+      subscriptionActive: !!user.subscriptionActive,
+      subscriptionExpires: user.subscriptionExpires || undefined,
+      subscriptionTier: user.subscriptionTier || 'free',
+      isAdmin: !!user.isAdmin,
+      trialUsed: !!user.trialUsed,
+      giftBoomBonusUsed: !!user.giftBoomBonusUsed,
+      referredBy: user.referredBy || undefined,
+      referralCount: user.referralCount || 0,
+      referralLink: user.referralLink || undefined
+    };
+  }
+
 }
 
 export class MessagesRepository implements IMessagesRepository {

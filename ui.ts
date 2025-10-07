@@ -3,6 +3,8 @@ import { Context } from "grammy";
 import dedent from "dedent";
 import { UserRepository } from "./database";
 import { AdminService, SubscriptionService, formatDate } from "./services";
+import { InputFile } from "grammy";
+import * as fs from "fs";
 
 // Обработчик callback-запросов для кнопок
 export async function handleCallbackQuery(ctx: Context) {
@@ -20,6 +22,18 @@ export async function handleCallbackQuery(ctx: Context) {
     // Обработка основных кнопок
     if (data === 'main_menu') {
       await showMainMenu(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data === 'bot_demo') {
+      await showBotDemo(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data === 'show_instructions') {
+      await showConnectionInstructions(ctx);
       await ctx.answerCallbackQuery();
       return;
     }
@@ -42,23 +56,17 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
-    if (data === 'help') {
-      await showHelp(ctx);
-      await ctx.answerCallbackQuery();
-      return;
-    }
-
     if (data === 'referral_system') {
-      await showReferralSystem(ctx);
-      await ctx.answerCallbackQuery();
-      return;
-    }
+    await showReferralSystem(ctx);
+    await ctx.answerCallbackQuery();
+    return;
+  }
 
-    if (data === 'check_giftboom_sub') {
-      await checkGiftBoomSubscription(ctx);
-      await ctx.answerCallbackQuery();
-      return;
-    }
+    if (data === 'giftboom_system') {
+    await showGiftBoomSystem(ctx); // переименовываем функцию
+    await ctx.answerCallbackQuery();
+    return;
+  }
 
     // Админские кнопки
     if (data.startsWith('admin_')) {
@@ -123,7 +131,121 @@ export async function handleCallbackQuery(ctx: Context) {
   }
 }
 
+// Приветственное сообщение при команде /start
+export async function showWelcomeMessage(ctx: Context) {
+  if (!ctx.from) return;
+
+  try {
+    const welcomeMessage = dedent`
+      👋 <b>Привет! Я - бот для мониторинга сообщений в Telegram Business</b>
+      
+      🔔 Что я умею:
+      • Уведомляю об удаленных сообщениях
+      • Уведомляю об отредактированных сообщениях
+      • Сохраняю историю всех изменений
+      
+      🚀 Я помогу вам не пропустить важные изменения в переписке с клиентами!
+      
+      Нажмите кнопку ниже, чтобы увидеть демонстрацию работы бота.
+    `;
+
+    await ctx.reply(welcomeMessage, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🎬 Демонстрация бота", callback_data: "bot_demo" }]
+        ]
+      }
+    });
+  } catch (error) {
+    console.error("Error in showWelcomeMessage:", error);
+  }
+}
+
+// Функция для показа демонстрации бота
+export async function showBotDemo(ctx: Context) {
+  if (!ctx.from) return;
+
+  try {
+    // Отправляем сообщение о загрузке
+    await ctx.editMessageText("📹 Загружаю демонстрационные видео...");
+
+    // Проверяем наличие обоих файлов
+    const editVideoPath = "./img/edit.mp4";
+    const deleteVideoPath = "./img/delete.mp4";
+    
+    if (fs.existsSync(editVideoPath) && fs.existsSync(deleteVideoPath)) {
+      // Отправляем оба видео в одном сообщении
+      await ctx.api.sendMediaGroup(ctx.from.id, [
+        {
+          type: "video",
+          media: new InputFile(editVideoPath),
+          caption: "🎬 Демонстрация #1: Как бот реагирует на редактирование сообщений"
+        },
+        {
+          type: "video",
+          media: new InputFile(deleteVideoPath),
+          caption: "🎬 Демонстрация #2: Как бот реагирует на удаление сообщений"
+        }
+      ]);
+
+      // Отправляем финальное сообщение с кнопкой
+      await ctx.api.sendMessage(
+        ctx.from.id,
+        "✅ Демонстрация завершена!\n\nТеперь вы знаете, как работает бот 🚀",
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📖 Как подключить бота", callback_data: "show_instructions" }]
+            ]
+          }
+        }
+      );
+    } else {
+      console.error("Video files not found");
+      await ctx.reply("❌ Видео-файлы не найдены.");
+    }
+
+  } catch (error) {
+    console.error("Error in showBotDemo:", error);
+    await ctx.reply("❌ Произошла ошибка при загрузке демонстрационных видео.");
+  }
+}
+
+// Функция для показа инструкции по подключению бота
+export async function showConnectionInstructions(ctx: Context) {
+  if (!ctx.from) return;
+
+  try {
+    const instructionsMessage = dedent`
+      📖 <b>Как подключить бота</b>
+      
+      <b>Шаг 1:</b> Откройте настройки Telegram
+      <b>Шаг 2:</b> Перейдите в раздел <i>Telegram Business</i>
+      <b>Шаг 3:</b> Выберите <i>Чат-боты</i>
+      <b>Шаг 4:</b> Назначьте меня как чат-бота
+      
+      ✅ После этого я начну отслеживать все изменения в ваших сообщениях!
+      
+      💡 <b>Важно:</b> Для использования всех функций необходима активная подписка.
+    `;
+
+    await ctx.editMessageText(instructionsMessage, {
+      parse_mode: "HTML"
+    });
+
+    // Отправляем второе сообщение с главным меню
+    await showMainMenu(ctx);
+
+  } catch (error) {
+    console.error("Error in showConnectionInstructions:", error);
+    await ctx.reply("❌ Произошла ошибка при отображении инструкций.");
+  }
+}
+
 // Функции для обработки основных кнопок
+// В функции showMainMenu заменим кнопки:
 export async function showMainMenu(ctx: Context) {
   const usersCollection = new UserRepository();
   const adminService = new AdminService();
@@ -141,6 +263,11 @@ export async function showMainMenu(ctx: Context) {
       ✅ <b>Ваша подписка активна!</b>
       
       Вы можете использовать все функции бота.
+      
+      <b>Для настройки:</b>
+      1. Откройте настройки Telegram
+      2. Перейдите в <i>Telegram Business -> Чат-боты</i>
+      3. Назначьте меня как чат-бота
     `;
   } else {
     message = dedent`
@@ -149,6 +276,11 @@ export async function showMainMenu(ctx: Context) {
       ❌ <b>Требуется подписка</b>
       
       Для использования бота необходимо приобрести подписку.
+      
+      <b>Для настройки:</b>
+      1. Откройте настройки Telegram
+      2. Перейдите в <i>Telegram Business -> Чат-боты</i>
+      3. Назначьте меня как чат-бота
     `;
   }
 
@@ -161,9 +293,9 @@ export async function showMainMenu(ctx: Context) {
   keyboard.push([{ text: "💎 Моя подписка", callback_data: "my_subscription" }]);
   
   keyboard.push(
-    [{ text: "🎁 Реферальная система", callback_data: "referral_system" }],
-    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
-    [{ text: "❓ Помощь", callback_data: "help" }]
+    [{ text: "👥 Реферальная система", callback_data: "referral_system" }],
+    [{ text: "🎁 Бесплатная подписка", callback_data: "giftboom_system" }],
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }]
   );
 
   try {
@@ -176,6 +308,73 @@ export async function showMainMenu(ctx: Context) {
       parse_mode: "HTML",
       reply_markup: { inline_keyboard: keyboard }
     });
+  }
+
+}
+
+
+// Новая функция для отправки сообщения о реферальной системе
+export async function showReferralSystemMessage(ctx: Context) {
+  const usersCollection = new UserRepository();
+  
+  if (!ctx.from) return;
+
+  try {
+    const hasUsedBonus = await usersCollection.hasUsedGiftBoomBonus(ctx.from.id);
+    const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
+
+    let message = '';
+    
+    if (hasUsedBonus) {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
+
+        ❌ Вы уже использовали бонус за подписку на Gift Boom.
+
+        Спасибо за вашу поддержку! ❤️
+      `;
+    } else if (hasActiveSubscription) {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
+
+        ✅ У вас уже есть активная подписка!
+
+        Спасибо за использование нашего бота! 🚀
+      `;
+    } else {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
+
+        🔥 <b>Получите +7 дней бесплатно!</b>
+
+        Для получения бонуса:
+        1. Подпишитесь на @giftboom_official
+        2. Нажмите кнопку "✅ Проверить подписку"
+        3. Получите +7 дней к пробному периоду
+
+        ⚠️ Можно использовать только 1 раз
+      `;
+    }
+
+    const keyboard = [];
+    
+    if (!hasUsedBonus && !hasActiveSubscription) {
+      keyboard.push([{ text: "📢 Перейти в @giftboom", url: "https://t.me/giftboom_official" }]);
+      keyboard.push([{ text: "✅ Проверить подписку", callback_data: "check_giftboom_sub" }]);
+    }
+    
+    keyboard.push([{ text: "⬅️ Назад", callback_data: "main_menu" }]);
+
+    await ctx.api.sendMessage(
+      ctx.from.id,
+      message,
+      {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      }
+    );
+  } catch (error) {
+    console.error("Error in showReferralSystemMessage:", error);
   }
 }
 
@@ -311,7 +510,6 @@ export async function showHelp(ctx: Context) {
 
   const keyboard = [
     [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
-    [{ text: "🎁 Реферальная система", callback_data: "referral_system" }],
     [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
     [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
   ];
@@ -333,7 +531,7 @@ export async function showHelp(ctx: Context) {
   }
 }
 
-export async function showReferralSystem(ctx: Context) {
+export async function showGiftBoomSystem(ctx: Context) {
   const usersCollection = new UserRepository();
   
   if (!ctx.from) return;
@@ -357,7 +555,7 @@ export async function showReferralSystem(ctx: Context) {
       message = dedent`
         🎁 <b>Реферальная система</b>
 
-        ✅ У вас уже есть активная подписка!
+        ✅ У вас уже есть активная подписку!
 
         Спасибо за использование нашего бота! 🚀
       `;
@@ -548,5 +746,73 @@ export async function checkGiftBoomSubscription(ctx: Context) {
         }
       }
     );
+  }
+}
+
+// Новая функция для реферальной системы
+export async function showReferralSystem(ctx: Context) {
+  const usersCollection = new UserRepository();
+  
+  if (!ctx.from) return;
+
+  try {
+    const user = await usersCollection.getUserById(ctx.from.id);
+    
+    // Генерируем реферальную ссылку если её нет
+    let referralLink = user.referralLink;
+    if (!referralLink) {
+      referralLink = `https://t.me/ReadAndEditbot?start=ref_${ctx.from.id}`;
+      await usersCollection.setReferralLink(ctx.from.id, referralLink);
+    }
+
+    const referralCount = user.referralCount || 0;
+    
+    // Определяем бонусы
+    const bonuses = [
+      { count: 3, days: 7, achieved: referralCount >= 3 },
+      { count: 5, days: 30, achieved: referralCount >= 5 },
+      { count: 10, days: 180, achieved: referralCount >= 10 },
+      { count: 30, days: -1, achieved: referralCount >= 30, text: "навсегда" }
+    ];
+
+    let message = dedent`
+      👥 <b>Реферальная система</b>
+
+      🔗 <b>Ваша реферальная ссылка:</b>
+      <code>${referralLink}</code>
+
+      📊 <b>Статистика:</b>
+      • Приглашено пользователей: ${referralCount}
+
+      🎁 <b>Бонусы за приглашения:</b>
+    `;
+
+    bonuses.forEach(bonus => {
+      const status = bonus.achieved ? "✅" : "⏳";
+      const daysText = bonus.days === -1 ? "навсегда" : `${bonus.days} дней`;
+      message += `\n${status} За ${bonus.count} человек - ${daysText}`;
+    });
+
+    message += "\n\n⚠️ <b>Важно:</b> Бонусы начисляются только если пользователь перешел по вашей ссылке и активировал бота.";
+
+    const keyboard = [
+      [{ text: "📤 Поделиться ссылкой", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!` }],
+      [{ text: "🔄 Обновить статистику", callback_data: "referral_system" }],
+      [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+    ];
+
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    } catch (error) {
+      await ctx.reply(message, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    }
+  } catch (error) {
+    console.error("Error in showReferralSystem:", error);
   }
 }

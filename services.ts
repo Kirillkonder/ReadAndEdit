@@ -477,4 +477,26 @@ export class SubscriptionService {
 
   await this.usersCollection.activateSubscription(userId, days, tier);
 }
+
+  public async applyReferralBonus(userId: number, referralCount: number): Promise<number> {
+    const usersCollection = new UserRepository();
+    
+    let bonusDays = 0;
+    if (referralCount === 3) {
+      bonusDays = 7;
+    } else if (referralCount === 5) {
+      bonusDays = 30;
+    } else if (referralCount === 10) {
+      bonusDays = 180;
+    } else if (referralCount === 30) {
+      bonusDays = -1; // вечная подписка
+    }
+    
+    if (bonusDays !== 0) {
+      await usersCollection.activateSubscription(userId, bonusDays, "referral");
+    }
+    
+    return bonusDays;
+  }
+
 }
