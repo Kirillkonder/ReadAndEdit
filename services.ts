@@ -444,32 +444,32 @@ export class SubscriptionService {
   }
 
   async sendSubscriptionInvoice(ctx: Context): Promise<void> {
-    const title = "Ежемесячная подписка";
-    const description = "Доступ к мониторингу сообщений на 30 дней";
-    const payload = "subscription_monthly";
-    const price = 49; // 49 Stars
+  const title = "Ежемесячная подписка";
+  const description = "Доступ к мониторингу сообщений на 30 дней";
+  const payload = "subscription_monthly";
+  const price = 1; // 1 Star вместо 49
 
-    await ctx.api.sendInvoice(
-      ctx.chat!.id,
-      title,
-      description,
-      payload,
-      "XTR", // Telegram Stars currency
-      [
-        {
-          label: title,
-          amount: price, // Amount in Stars (1 Star = 1 unit)
-        },
-      ],
+  await ctx.api.sendInvoice(
+    ctx.chat!.id,
+    title,
+    description,
+    payload,
+    "XTR", // Telegram Stars currency
+    [
       {
-        need_name: false,
-        need_phone_number: false,
-        need_email: false,
-        need_shipping_address: false,
-        is_flexible: false,
-      }
-    );
-  }
+        label: title,
+        amount: price, // 1 Star
+      },
+    ],
+    {
+      need_name: false,
+      need_phone_number: false,
+      need_email: false,
+      need_shipping_address: false,
+      is_flexible: false,
+    }
+  );
+}
 
   public async activateSubscription(userId: number): Promise<void> {
   try {

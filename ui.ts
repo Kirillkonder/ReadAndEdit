@@ -400,6 +400,8 @@ export async function showMySubscription(ctx: Context) {
         subscriptionType = "🎁 Бонус за подписку";
       } else if (user.subscriptionTier === "monthly") {
         subscriptionType = "💎 Оплаченная";
+      } else if (user.subscriptionTier === "referral") {
+        subscriptionType = "👥 Реферальная";
       }
       
       await ctx.editMessageText(
@@ -429,7 +431,7 @@ export async function showMySubscription(ctx: Context) {
           
           Для использования бота необходимо приобрести подписку.
           
-          💰 Стоимость: 49 Stars (≈ 1$)
+          💰 Стоимость: 1 Star
           ⏰ Срок: 30 дней
           
           После покупки подписки вы получите полный доступ к функциям бота.
@@ -451,7 +453,7 @@ export async function showMySubscription(ctx: Context) {
   }
 }
 
-export async function buySubscription(ctx: Context) {
+ export async function buySubscription(ctx: Context) {
   const subscriptionService = new SubscriptionService();
   
   try {
@@ -459,7 +461,7 @@ export async function buySubscription(ctx: Context) {
       dedent`
         💎 <b>Ежемесячная подписка</b>
         
-        💰 Стоимость: 49 Stars (≈ 1$)
+        💰 Стоимость: 1 Star
         ⏰ Срок: 30 дней
         
         <b>Что вы получите:</b>
@@ -473,7 +475,7 @@ export async function buySubscription(ctx: Context) {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "💳 Оплатить 49 ⭐", callback_data: "pay_subscription" }],
+            [{ text: "💳 Оплатить 1 ⭐", callback_data: "pay_subscription" }], // Изменил текст кнопки
             [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
         }
