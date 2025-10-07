@@ -472,10 +472,16 @@ export class SubscriptionService {
   }
 
   public async activateSubscription(userId: number): Promise<void> {
-  const days = 30;
-  const tier = "monthly";
+  try {
+    const days = 30;
+    const tier = "monthly";
 
-  await this.usersCollection.activateSubscription(userId, days, tier);
+    await this.usersCollection.activateSubscription(userId, days, tier);
+    console.log(`Subscription activated for user ${userId}`);
+  } catch (error) {
+    console.error(`Error activating subscription for user ${userId}:`, error);
+    throw new Error(`Failed to activate subscription: ${error}`);
+  }
 }
 
   public async applyReferralBonus(userId: number, referralCount: number): Promise<number> {

@@ -356,7 +356,7 @@ export class UserRepository implements IUserRepository {
     }
   }
 
-  public async activateSubscription(userId: number, days: number, tier: string): Promise<void> {
+ public async activateSubscription(userId: number, days: number, tier: string): Promise<void> {
   try {
     const user = await this.getUserById(userId);
     const currentTime = Date.now();

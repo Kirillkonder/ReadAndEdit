@@ -157,7 +157,7 @@ class BotInstance {
     }
   }
 
-  private async handleSuccessfulPayment(ctx: Context) {
+ private async handleSuccessfulPayment(ctx: Context) {
   try {
     if (!ctx.from || !ctx.message?.successful_payment) return;
 
@@ -166,9 +166,11 @@ class BotInstance {
     // Получаем обновленные данные пользователя
     const usersCollection = new UserRepository();
     const user = await usersCollection.getUserById(ctx.from.id);
+    
+    // Правильно рассчитываем дни подписки
     const daysLeft = user.subscriptionExpires 
-      ? Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 1000))
-      : 0;
+      ? Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24))
+      : 30; // По умолчанию 30 дней
 
     await ctx.reply(
       dedent`
@@ -199,7 +201,30 @@ class BotInstance {
 
   } catch (error) {
     console.error("Error handling successful payment:", error);
-    await ctx.reply("Произошла ошибка при активации подписки. Пожалуйста, свяжитесь с поддержкой.");
+    
+    // Более информативное сообщение об ошибке
+    await ctx.reply(
+      dedent`
+        ❌ Произошла ошибка при активации подписки.
+        
+        Ваш платеж успешно обработан, но возникла техническая ошибка.
+        Пожалуйста, свяжитесь с поддержкой и предоставьте эту информацию:
+        
+        • ID пользователя: <code>${ctx.from?.id}</code>
+        • Время платежа: ${new Date().toLocaleString('ru-RU')}
+        
+        Мы активируем вашу подписку вручную в кратчайшие сроки.
+      `,
+      { 
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📞 Связаться с поддержкой", url: "https://t.me/your_support_chat" }],
+            [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      }
+    );
   }
 }
 
