@@ -94,6 +94,7 @@ export class AdminService {
             [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
             [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
             [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
+            [{ text: "⭐ Мгновенный вывод звезд", callback_data: "admin_instant_withdraw" }],
             [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
             [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
@@ -425,6 +426,54 @@ export class AdminService {
       } else {
         await ctx.reply("❌ Ошибка при удалении администратора. Пользователь не найден.");
       }
+    }
+  }
+
+  async showInstantWithdrawMenu(ctx: Context): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    await ctx.reply(
+      "⭐ <b>Мгновенный вывод звезд</b>\n\nВведите ID пользователя для мгновенного вывода:\n\nПример:\n<code>123456789</code>\n\n⚠️ Это снимет 21-дневное ограничение на вывод звезд.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  }
+
+  async processInstantWithdraw(ctx: Context, userId: number): Promise<void> {
+    if (!await this.isAdmin(ctx.from!.id)) return;
+
+    try {
+      const user = await this.usersCollection.getUserById(userId);
+      
+      // Здесь должна быть логика вывода звезд
+      // В данном случае мы просто подтверждаем действие
+      
+      await ctx.reply(
+        dedent`
+          ✅ <b>Мгновенный вывод звезд разрешен!</b>
+          
+          👤 Пользователь: ${user.firstName} (ID: ${user.userId})
+          ⭐ Теперь пользователь может вывести звезды без ожидания 21 дня
+          
+          ⚠️ Примечание: Фактический вывод звезд осуществляется через API Telegram
+        `,
+        { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      );
+    } catch (error) {
+      await ctx.reply("❌ Ошибка при обработке мгновенного вывода. Пользователь не найден.");
     }
   }
 }

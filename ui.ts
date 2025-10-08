@@ -118,6 +118,11 @@ export async function handleCallbackQuery(ctx: Context) {
       } else if (data.startsWith('admin_user_')) {
         const userId = parseInt(data.split('_')[2]);
         await adminService.showUserInfo(ctx, userId);
+      } else if (data === 'admin_instant_withdraw') {
+        await adminService.showInstantWithdrawMenu(ctx);
+      } else if (data.startsWith('admin_withdraw_')) {
+        const userId = parseInt(data.split('_')[2]);
+        await adminService.processInstantWithdraw(ctx, userId);
       }
       
       await ctx.answerCallbackQuery();
