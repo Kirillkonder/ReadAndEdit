@@ -63,13 +63,7 @@ export async function handleCallbackQuery(ctx: Context) {
   }
 
     if (data === 'giftboom_system') {
-    await showGiftBoomSystem(ctx);
-    await ctx.answerCallbackQuery();
-    return;
-  }
-
-    if (data === 'check_giftboom_sub') {
-    await checkGiftBoomSubscription(ctx);
+    await showGiftBoomSystem(ctx); // переименовываем функцию
     await ctx.answerCallbackQuery();
     return;
   }
@@ -102,10 +96,6 @@ export async function handleCallbackQuery(ctx: Context) {
         await adminService.showMakeAdminMenu(ctx);
       } else if (data === 'admin_remove_admin_menu') {
         await adminService.showRemoveAdminMenu(ctx);
-      } else if (data === 'admin_withdraw_stars') {
-        await adminService.showWithdrawStarsMenu(ctx);
-      } else if (data === 'admin_withdraw_stars_confirm') {
-        await adminService.withdrawStarsToAdmin(ctx);
       } else if (data.startsWith('admin_give_')) {
         const parts = data.split('_');
         const days = parseInt(parts[2]);
@@ -287,7 +277,7 @@ export async function showMainMenu(ctx: Context) {
       
       Для использования бота необходимо приобрести подписку.
       
-      <b>Для настройки после покупки:</b>
+      <b>Для настройки:</b>
       1. Откройте настройки Telegram
       2. Перейдите в <i>Telegram Business -> Чат-боты</i>
       3. Назначьте меня как чат-бота
@@ -296,186 +286,253 @@ export async function showMainMenu(ctx: Context) {
 
   const keyboard = [];
   
-  if (!hasActiveSubscription) {
-    keyboard.push([{ text: "💎 Купить подписку", callback_data: "buy_subscription" }]);
-  }
-  
-  keyboard.push(
-    [{ text: "📊 Моя подписка", callback_data: "my_subscription" }],
-    [{ text: "🎁 Реферальная система", callback_data: "referral_system" }],
-    [{ text: "🎯 GiftBoom", callback_data: "giftboom_system" }]
-  );
-  
   if (isAdmin) {
     keyboard.push([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
   }
+  
+  keyboard.push([{ text: "💎 Моя подписка", callback_data: "my_subscription" }]);
+  
+  keyboard.push(
+    [{ text: "👥 Реферальная система", callback_data: "referral_system" }],
+    [{ text: "🎁 Бесплатная подписка", callback_data: "giftboom_system" }],
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }]
+  );
 
-  // Если сообщение было отредактировано, используем editMessageText
-  if (ctx.callbackQuery) {
+  try {
     await ctx.editMessageText(message, {
       parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: keyboard
-      }
+      reply_markup: { inline_keyboard: keyboard }
     });
-  } else {
+  } catch (error) {
     await ctx.reply(message, {
       parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: keyboard
-      }
+      reply_markup: { inline_keyboard: keyboard }
     });
   }
+
 }
 
-// Функция для показа информации о подписке пользователя
-export async function showMySubscription(ctx: Context) {
+
+// Новая функция для отправки сообщения о реферальной системе
+export async function showReferralSystemMessage(ctx: Context) {
   const usersCollection = new UserRepository();
   
   if (!ctx.from) return;
 
-  const user = await usersCollection.getUserById(ctx.from.id);
-  const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
+  try {
+    const hasUsedBonus = await usersCollection.hasUsedGiftBoomBonus(ctx.from.id);
+    const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
 
-  let subscriptionInfo = "❌ Нет активной подписки";
-  if (hasActiveSubscription && user.subscriptionExpires) {
-    const expiresDate = new Date(user.subscriptionExpires);
-    const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
-    subscriptionInfo = `✅ Активна (осталось ${daysLeft} дней, до ${expiresDate.toLocaleDateString('ru-RU')})`;
-  }
-
-  const message = dedent`
-    💎 <b>Информация о подписке</b>
+    let message = '';
     
-    👤 Пользователь: ${user.firstName}
-    📅 Зарегистрирован: ${formatDate(user.createdAt)}
-    💎 Статус подписки: ${subscriptionInfo}
-    🏷️ Тариф: ${user.subscriptionTier}
-    
-    ${!hasActiveSubscription ? '💡 Для доступа к функциям бота приобретите подписку.' : '🚀 Вы можете использовать все функции бота!'}
-  `;
+    if (hasUsedBonus) {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
 
-  const keyboard = [];
-  
-  if (!hasActiveSubscription) {
-    keyboard.push([{ text: "💎 Купить подписку", callback_data: "buy_subscription" }]);
-  }
-  
-  keyboard.push([{ text: "⬅️ Главное меню", callback_data: "main_menu" }]);
+        ❌ Вы уже использовали бонус за подписку на Gift Boom.
 
-  await ctx.editMessageText(message, {
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: keyboard
+        Спасибо за вашу поддержку! ❤️
+      `;
+    } else if (hasActiveSubscription) {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
+
+        ✅ У вас уже есть активная подписка!
+
+        Спасибо за использование нашего бота! 🚀
+      `;
+    } else {
+      message = dedent`
+        🎁 <b>Реферальная система</b>
+
+        🔥 <b>Получите +7 дней бесплатно!</b>
+
+        Для получения бонуса:
+        1. Подпишитесь на @giftboom_official
+        2. Нажмите кнопку "✅ Проверить подписку"
+        3. Получите +7 дней к пробному периоду
+
+        ⚠️ Можно использовать только 1 раз
+      `;
     }
-  });
+
+    const keyboard = [];
+    
+    if (!hasUsedBonus && !hasActiveSubscription) {
+      keyboard.push([{ text: "📢 Перейти в @giftboom", url: "https://t.me/giftboom_official" }]);
+      keyboard.push([{ text: "✅ Проверить подписку", callback_data: "check_giftboom_sub" }]);
+    }
+    
+    keyboard.push([{ text: "⬅️ Назад", callback_data: "main_menu" }]);
+
+    await ctx.api.sendMessage(
+      ctx.from.id,
+      message,
+      {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      }
+    );
+  } catch (error) {
+    console.error("Error in showReferralSystemMessage:", error);
+  }
 }
 
-// Функция для показа меню покупки подписки
-export async function buySubscription(ctx: Context) {
-  const subscriptionService = new SubscriptionService();
-  
-  if (!ctx.from) return;
-
-  const message = dedent`
-    💎 <b>Приобретение подписки</b>
-    
-    <b>Что входит в подписку:</b>
-    • Уведомления об удаленных сообщениях
-    • Уведомления об отредактированных сообщениях
-    • Полная история всех изменений
-    • Доступ к статистике
-    
-    <b>Стоимость:</b> 1 ⭐ в месяц
-    
-    💡 <b>Как оплатить:</b>
-    1. Нажмите кнопку "💳 Оплатить подписку"
-    2. Выберите количество звезд
-    3. Подтвердите оплату
-    
-    После успешной оплаты подписка будет активирована автоматически.
-  `;
-
-  await ctx.editMessageText(message, {
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "💳 Оплатить подписку (1 ⭐)", callback_data: "pay_subscription" }],
-        [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-// Функция для показа реферальной системы
-export async function showReferralSystem(ctx: Context) {
+export async function showMySubscription(ctx: Context) {
   const usersCollection = new UserRepository();
   
   if (!ctx.from) return;
 
   try {
     const user = await usersCollection.getUserById(ctx.from.id);
-    
-    // Генерируем реферальную ссылку если её нет
-    let referralLink = user.referralLink;
-    if (!referralLink) {
-      referralLink = `https://t.me/ReadAndEditbot?start=ref_${ctx.from.id}`;
-      await usersCollection.setReferralLink(ctx.from.id, referralLink);
-    }
+    const hasActiveSubscription = await usersCollection.checkSubscription(ctx.from.id);
 
-    const referralCount = user.referralCount || 0;
-    
-    // Определяем бонусы
-    const bonuses = [
-      { count: 3, days: 7, achieved: referralCount >= 3 },
-      { count: 5, days: 30, achieved: referralCount >= 5 },
-      { count: 10, days: 180, achieved: referralCount >= 10 },
-      { count: 30, days: -1, achieved: referralCount >= 30, text: "навсегда" }
-    ];
-
-    let message = dedent`
-      👥 <b>Реферальная система</b>
-
-      🔗 <b>Ваша реферальная ссылка:</b>
-      <code>${referralLink}</code>
-
-      📊 <b>Статистика:</b>
-      • Приглашено пользователей: ${referralCount}
-
-      🎁 <b>Бонусы за приглашения:</b>
-    `;
-
-    bonuses.forEach(bonus => {
-      const status = bonus.achieved ? "✅" : "⏳";
-      const daysText = bonus.days === -1 ? "навсегда" : `${bonus.days} дней`;
-      message += `\n${status} За ${bonus.count} человек - ${daysText}`;
-    });
-
-    message += "\n\n⚠️ <b>Важно:</b> Бонусы начисляются только если пользователь перешел по вашей ссылке и активировал бота.";
-
-    const keyboard = [
-      [{ text: "📤 Поделиться ссылкой", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!` }],
-      [{ text: "🔄 Обновить статистику", callback_data: "referral_system" }],
-      [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
-    ];
-
-    try {
-      await ctx.editMessageText(message, {
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: keyboard }
-      });
-    } catch (error) {
-      await ctx.reply(message, {
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: keyboard }
-      });
+    if (hasActiveSubscription && user.subscriptionExpires) {
+      const expiresDate = new Date(user.subscriptionExpires);
+      const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
+      
+      let subscriptionType = "Ежемесячный";
+      if (user.subscriptionTier === "admin_forever") {
+        subscriptionType = "👑 Вечная (Админ)";
+      } else if (user.subscriptionTier === "admin") {
+        subscriptionType = "⚡ Выданная админом";
+      } else if (user.subscriptionTier === "giftboom_bonus") {
+        subscriptionType = "🎁 Бонус за подписку";
+      } else if (user.subscriptionTier === "monthly") {
+        subscriptionType = "💎 Оплаченная";
+      } else if (user.subscriptionTier === "referral") {
+        subscriptionType = "👥 Реферальная";
+      }
+      
+      await ctx.editMessageText(
+        dedent`
+          ✅ <b>Ваша подписка активна</b>
+          
+          💎 Тариф: ${subscriptionType}
+          📅 Действует до: ${expiresDate.toLocaleDateString('ru-RU')}
+          ⏳ Осталось дней: ${daysLeft}
+          
+          Спасибо за использование нашего бота! 🚀
+        `,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Продлить подписку", callback_data: "buy_subscription" }],
+              [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+            ]
+          }
+        }
+      );
+    } else {
+      await ctx.editMessageText(
+        dedent`
+          ❌ <b>Подписка не активна</b>
+          
+          Для использования бота необходимо приобрести подписку.
+          
+          💰 Стоимость: 1 Star
+          ⏰ Срок: 30 дней
+          
+          После покупки подписки вы получите полный доступ к функциям бота.
+        `,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+              [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+            ]
+          }
+        }
+      );
     }
   } catch (error) {
-    console.error("Error in showReferralSystem:", error);
+    console.error("Error in showMySubscription:", error);
+    await ctx.reply("Произошла ошибка при получении информации о подписке.");
   }
 }
 
-// Функция для показа системы GiftBoom
+ export async function buySubscription(ctx: Context) {
+  const subscriptionService = new SubscriptionService();
+  
+  try {
+    await ctx.editMessageText(
+      dedent`
+        💎 <b>Ежемесячная подписка</b>
+        
+        💰 Стоимость: 1 Star
+        ⏰ Срок: 30 дней
+        
+        <b>Что вы получите:</b>
+        • Уведомления об удаленных сообщениях
+        • Уведомления об отредактированных сообщениях
+        • Мониторинг всех входящих сообщений
+        
+        Нажмите кнопку ниже для оплаты.
+      `,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💳 Оплатить 1 ⭐", callback_data: "pay_subscription" }], // Изменил текст кнопки
+            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    console.error("Error in buySubscription:", error);
+  }
+}
+
+export async function showHelp(ctx: Context) {
+  const adminService = new AdminService();
+  const isAdmin = ctx.from ? await adminService.isAdmin(ctx.from.id) : false;
+
+  let helpText = dedent`
+    ❓ <b>Помощь</b>
+
+    
+
+    <b>Как настроить бота:</b>
+    1. Откройте настройки Telegram
+    2. Перейдите в <i>Telegram Business -> Чат-боты</i>
+    3. Назначьте меня как чат-бота
+
+    <b>Функции бота:</b>
+    • Уведомления об удаленных сообщениях
+    • Уведомления об edited сообщениях
+    • Мониторинг всех входящих сообщений
+  `;
+
+  if (isAdmin) {
+    helpText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
+  }
+
+  const keyboard = [
+    [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+    [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+  ];
+
+  if (isAdmin) {
+    keyboard.unshift([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
+  }
+
+  try {
+    await ctx.editMessageText(helpText, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  } catch (error) {
+    await ctx.reply(helpText, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  }
+}
+
 export async function showGiftBoomSystem(ctx: Context) {
   const usersCollection = new UserRepository();
   
@@ -490,7 +547,7 @@ export async function showGiftBoomSystem(ctx: Context) {
     
     if (hasUsedBonus) {
       message = dedent`
-        🎁 <b>Бонус от GiftBoom</b>
+        🎁 <b>Реферальная система</b>
 
         ❌ Вы уже использовали бонус за подписку на Gift Boom.
 
@@ -498,15 +555,15 @@ export async function showGiftBoomSystem(ctx: Context) {
       `;
     } else if (hasActiveSubscription) {
       message = dedent`
-        🎁 <b>Бонус от GiftBoom</b>
+        🎁 <b>Реферальная система</b>
 
-        ✅ У вас уже есть активная подписка!
+        ✅ У вас уже есть активная подписку!
 
         Спасибо за использование нашего бота! 🚀
       `;
     } else {
       message = dedent`
-        🎁 <b>Бонус от GiftBoom</b>
+        🎁 <b>Реферальная система</b>
 
         🔥 <b>Получите +7 дней бесплатно!</b>
 
@@ -540,7 +597,7 @@ export async function showGiftBoomSystem(ctx: Context) {
       });
     }
   } catch (error) {
-    console.error("Error in showGiftBoomSystem:", error);
+    console.error("Error in showReferralSystem:", error);
   }
 }
 
@@ -580,7 +637,7 @@ export async function checkGiftBoomSubscription(ctx: Context) {
             reply_markup: {
               inline_keyboard: [
                 [{ text: "🔄 Проверить подписку", callback_data: "check_giftboom_sub" }],
-                [{ text: "⬅️ Назад", callback_data: "giftboom_system" }]
+                [{ text: "⬅️ Назад", callback_data: "referral_system" }]
               ]
             }
           }
@@ -606,7 +663,7 @@ export async function checkGiftBoomSubscription(ctx: Context) {
             inline_keyboard: [
               [{ text: "📢 Перейти в @giftboom", url: "https://t.me/giftboom_official" }],
               [{ text: "🔄 Проверить подписку", callback_data: "check_giftboom_sub" }],
-              [{ text: "⬅️ Назад", callback_data: "giftboom_system" }]
+              [{ text: "⬅️ Назад", callback_data: "referral_system" }]
             ]
           }
         }
@@ -694,49 +751,70 @@ export async function checkGiftBoomSubscription(ctx: Context) {
   }
 }
 
-export async function showHelp(ctx: Context) {
-  const adminService = new AdminService();
-  const isAdmin = ctx.from ? await adminService.isAdmin(ctx.from.id) : false;
-
-  let helpText = dedent`
-    ❓ <b>Помощь</b>
-
-    
-
-    <b>Как настроить бота:</b>
-    1. Откройте настройки Telegram
-    2. Перейдите в <i>Telegram Business -> Чат-боты</i>
-    3. Назначьте меня как чат-бота
-
-    <b>Функции бота:</b>
-    • Уведомления об удаленных сообщениях
-    • Уведомления об edited сообщениях
-    • Мониторинг всех входящих сообщений
-  `;
-
-  if (isAdmin) {
-    helpText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
-  }
-
-  const keyboard = [
-    [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
-    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
-    [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
-  ];
-
-  if (isAdmin) {
-    keyboard.unshift([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
-  }
+// Новая функция для реферальной системы
+export async function showReferralSystem(ctx: Context) {
+  const usersCollection = new UserRepository();
+  
+  if (!ctx.from) return;
 
   try {
-    await ctx.editMessageText(helpText, {
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: keyboard }
+    const user = await usersCollection.getUserById(ctx.from.id);
+    
+    // Генерируем реферальную ссылку если её нет
+    let referralLink = user.referralLink;
+    if (!referralLink) {
+      referralLink = `https://t.me/ReadAndEditbot?start=ref_${ctx.from.id}`;
+      await usersCollection.setReferralLink(ctx.from.id, referralLink);
+    }
+
+    const referralCount = user.referralCount || 0;
+    
+    // Определяем бонусы
+    const bonuses = [
+      { count: 3, days: 7, achieved: referralCount >= 3 },
+      { count: 5, days: 30, achieved: referralCount >= 5 },
+      { count: 10, days: 180, achieved: referralCount >= 10 },
+      { count: 30, days: -1, achieved: referralCount >= 30, text: "навсегда" }
+    ];
+
+    let message = dedent`
+      👥 <b>Реферальная система</b>
+
+      🔗 <b>Ваша реферальная ссылка:</b>
+      <code>${referralLink}</code>
+
+      📊 <b>Статистика:</b>
+      • Приглашено пользователей: ${referralCount}
+
+      🎁 <b>Бонусы за приглашения:</b>
+    `;
+
+    bonuses.forEach(bonus => {
+      const status = bonus.achieved ? "✅" : "⏳";
+      const daysText = bonus.days === -1 ? "навсегда" : `${bonus.days} дней`;
+      message += `\n${status} За ${bonus.count} человек - ${daysText}`;
     });
+
+    message += "\n\n⚠️ <b>Важно:</b> Бонусы начисляются только если пользователь перешел по вашей ссылке и активировал бота.";
+
+    const keyboard = [
+      [{ text: "📤 Поделиться ссылкой", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!` }],
+      [{ text: "🔄 Обновить статистику", callback_data: "referral_system" }],
+      [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+    ];
+
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    } catch (error) {
+      await ctx.reply(message, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    }
   } catch (error) {
-    await ctx.reply(helpText, {
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: keyboard }
-    });
+    console.error("Error in showReferralSystem:", error);
   }
 }

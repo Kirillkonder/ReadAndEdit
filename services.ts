@@ -51,76 +51,9 @@ export class MarketApiClient {
   }
 }
 
-// Payment Service для работы с звездами
-export class PaymentService {
-  /**
-   * Получить баланс звезд бота
-   */
-  async getBotBalance(ctx: Context): Promise<number> {
-    try {
-      // Используем метод getStarTransactions для получения информации о звездах
-      const result = await ctx.api.getStarTransactions({
-        offset: 0,
-        limit: 1
-      });
-      
-      // В реальности нужно использовать другой метод для получения баланса
-      // Возвращаем заглушку, так как прямого API для получения баланса может не быть
-      return 0;
-    } catch (error) {
-      console.error("Error getting bot balance:", error);
-      return 0;
-    }
-  }
-
-  /**
-   * Вывести звезды на аккаунт администратора
-   */
-  async withdrawStars(ctx: Context, adminUserId: number): Promise<boolean> {
-    try {
-      // Используем метод refundStarPayment для возврата платежей
-      // В реальности для вывода нужно использовать другие методы
-      console.log(`Withdrawing stars to admin ${adminUserId}`);
-      
-      // Здесь должен быть реальный код вывода звезд
-      // Это заглушка, так как API Telegram для вывода звезд ограничено
-      
-      return true;
-    } catch (error) {
-      console.error("Error withdrawing stars:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Получить статистику по платежам
-   */
-  async getPaymentStats(ctx: Context): Promise<{total: number, count: number}> {
-    try {
-      // Получаем историю транзакций
-      const transactions = await ctx.api.getStarTransactions({
-        offset: 0,
-        limit: 100
-      });
-      
-      let total = 0;
-      let count = 0;
-      
-      // В реальности нужно анализировать транзакции
-      // Это заглушка
-      
-      return { total, count };
-    } catch (error) {
-      console.error("Error getting payment stats:", error);
-      return { total: 0, count: 0 };
-    }
-  }
-}
-
 // Admin Service
 export class AdminService {
   private usersCollection = new UserRepository();
-  private paymentService = new PaymentService();
 
   async isAdmin(userId: number): Promise<boolean> {
     return await this.usersCollection.isAdmin(userId);
@@ -139,9 +72,6 @@ export class AdminService {
     const totalUsers = await this.usersCollection.getAllUsers();
     const activeSubscriptions = totalUsers.filter(user => user.subscriptionActive).length;
     const admins = await this.usersCollection.getAllAdmins();
-    
-    // Получаем статистику платежей
-    const paymentStats = await this.paymentService.getPaymentStats(ctx);
 
     await ctx.reply(
       dedent`
@@ -151,7 +81,6 @@ export class AdminService {
         • Всего пользователей: ${totalUsers.length}
         • Активных подписок: ${activeSubscriptions}
         • Администраторов: ${admins.length}
-        • Получено звезд: ${paymentStats.total} ⭐ (${paymentStats.count} платежей)
         
         🛠️ <b>Доступные действия:</b>
       `,
@@ -159,7 +88,6 @@ export class AdminService {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "💰 Вывод звезд", callback_data: "admin_withdraw_stars" }],
             [{ text: "📋 Список пользователей", callback_data: "admin_users" }],
             [{ text: "👑 Список администраторов", callback_data: "admin_admins" }],
             [{ text: "💎 Выдать подписку", callback_data: "admin_give_sub_menu" }],
@@ -172,100 +100,6 @@ export class AdminService {
         }
       }
     );
-  }
-
-  async showWithdrawStarsMenu(ctx: Context): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
-
-    const paymentStats = await this.paymentService.getPaymentStats(ctx);
-
-    await ctx.reply(
-      dedent`
-        💰 <b>Вывод звезд</b>
-        
-        📊 <b>Статистика платежей:</b>
-        • Всего получено: ${paymentStats.total} ⭐
-        • Количество платежей: ${paymentStats.count}
-        
-        💡 <b>Как работает вывод:</b>
-        • Звезды выводятся на ваш аккаунт администратора
-        • Вывод происходит мгновенно
-        • Доступно только для администраторов
-        
-        Нажмите кнопку ниже для вывода звезд.
-      `,
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🚀 Вывести звезды", callback_data: "admin_withdraw_stars_confirm" }],
-            [{ text: "🔄 Обновить статистику", callback_data: "admin_withdraw_stars" }],
-            [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-          ]
-        }
-      }
-    );
-  }
-
-  async withdrawStarsToAdmin(ctx: Context): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
-
-    try {
-      await ctx.editMessageText("🔄 Начинаю вывод звезд...");
-
-      const success = await this.paymentService.withdrawStars(ctx, ctx.from!.id);
-      
-      if (success) {
-        await ctx.editMessageText(
-          dedent`
-            ✅ <b>Вывод звезд выполнен успешно!</b>
-            
-            💰 Звезды были переведены на ваш аккаунт.
-            📊 Статистика обновлена.
-            
-            Спасибо за использование нашего бота! 🚀
-          `,
-          {
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
-              ]
-            }
-          }
-        );
-      } else {
-        await ctx.editMessageText(
-          dedent`
-            ❌ <b>Ошибка при выводе звезд</b>
-            
-            Произошла ошибка при попытке вывода звезд.
-            Пожалуйста, попробуйте позже или обратитесь к разработчику.
-          `,
-          {
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "🔄 Попробовать снова", callback_data: "admin_withdraw_stars_confirm" }],
-                [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
-              ]
-            }
-          }
-        );
-      }
-    } catch (error) {
-      console.error("Error withdrawing stars:", error);
-      await ctx.editMessageText(
-        "❌ Произошла ошибка при выводе звезд. Пожалуйста, попробуйте позже.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
-            ]
-          }
-        }
-      );
-    }
   }
 
   async showUsersList(ctx: Context): Promise<void> {
@@ -318,6 +152,7 @@ export class AdminService {
       }}
     );
   }
+
 
   async showGiveSubscriptionMenu(ctx: Context): Promise<void> {
     if (!await this.isAdmin(ctx.from!.id)) return;
