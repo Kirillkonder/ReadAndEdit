@@ -310,11 +310,12 @@ export class UserRepository implements IUserRepository {
   };
 }
 
-  public async setAttribute(userId: number, key: string, value: any, returnResult: boolean = false): Promise<IUser | void> {
+ public async setAttribute(userId: number, key: string, value: any, returnResult: boolean = false): Promise<IUser | void> {
+  try {
     const userExists = await this.exists(userId, false);
     if (!userExists) {
       console.log(`User ${userId} does not exist, cannot set attribute ${key}`);
-      return;
+      throw new Error(`User ${userId} does not exist`);
     }
     
     const database = await this.db.connect();
@@ -323,10 +324,16 @@ export class UserRepository implements IUserRepository {
       [value, userId]
     );
 
+    console.log(`Attribute ${key} set to ${value} for user ${userId}`);
+
     if (returnResult) {
       return await this.getUserById(userId);
     }
+  } catch (error) {
+    console.error(`Error setting attribute ${key} for user ${userId}:`, error);
+    throw error;
   }
+}
 
   public async checkSubscription(userId: number): Promise<boolean> {
     try {
@@ -358,6 +365,13 @@ export class UserRepository implements IUserRepository {
 
  public async activateSubscription(userId: number, days: number, tier: string): Promise<void> {
   try {
+    console.log(`Activating subscription for user ${userId}, days: ${days}, tier: ${tier}`);
+    
+    const userExists = await this.exists(userId);
+    if (!userExists) {
+      throw new Error(`User ${userId} not found`);
+    }
+
     const user = await this.getUserById(userId);
     const currentTime = Date.now();
     
@@ -380,7 +394,7 @@ export class UserRepository implements IUserRepository {
     
     console.log(`Subscription activated for user ${userId}, tier: ${tier}, expires: ${new Date(expiresAt)}`);
   } catch (error) {
-    console.error(`Error activating subscription for user ${userId}:`, error);
+    console.error(`Error in activateSubscription for user ${userId}:`, error);
     throw error;
   }
 }

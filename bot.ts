@@ -161,7 +161,11 @@ class BotInstance {
   try {
     if (!ctx.from || !ctx.message?.successful_payment) return;
 
+    console.log(`Processing payment for user ${ctx.from.id}`);
+
+    // Активируем подписку
     await this.subscriptionService.activateSubscription(ctx.from.id);
+    console.log(`Subscription activated for user ${ctx.from.id}`);
 
     // Получаем обновленные данные пользователя
     const usersCollection = new UserRepository();
@@ -170,14 +174,18 @@ class BotInstance {
     // Правильно рассчитываем дни подписки
     const daysLeft = user.subscriptionExpires 
       ? Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24))
-      : 30; // По умолчанию 30 дней
+      : 30;
+
+    const expiresDate = user.subscriptionExpires 
+      ? new Date(user.subscriptionExpires).toLocaleDateString('ru-RU')
+      : 'не определена';
 
     await ctx.reply(
       dedent`
         ✅ <b>Подписка успешно активирована!</b>
         
-        📅 Подписка действует до: ${user.subscriptionExpires ? new Date(user.subscriptionExpires).toLocaleDateString('ru-RU') : 'не определена'}
-        ⏳ Всего дней подписки: ${daysLeft}
+        📅 Подписка действует до: ${expiresDate}
+        ⏳ Осталось дней: ${daysLeft}
         
         Спасибо за покупку! Теперь вы можете использовать все функции бота.
         
@@ -202,6 +210,13 @@ class BotInstance {
   } catch (error) {
     console.error("Error handling successful payment:", error);
     
+    // Логируем детали ошибки
+    console.error("Error details:", {
+      userId: ctx.from?.id,
+      payment: ctx.message?.successful_payment,
+      error: error instanceof Error ? error.message : error
+    });
+
     // Более информативное сообщение об ошибке
     await ctx.reply(
       dedent`
@@ -219,7 +234,7 @@ class BotInstance {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "📞 Связаться с поддержкой", url: "https://t.me/your_support_chat" }],
+            [{ text: "📞 Связаться с поддержкой", url: "https://t.me/whocencer" }],
             [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
           ]
         }

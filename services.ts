@@ -473,14 +473,23 @@ export class SubscriptionService {
 
   public async activateSubscription(userId: number): Promise<void> {
   try {
+    console.log(`Starting subscription activation for user ${userId}`);
+    
     const days = 30;
     const tier = "monthly";
 
+    // Проверяем существование пользователя
+    const userExists = await this.usersCollection.exists(userId);
+    if (!userExists) {
+      throw new Error(`User ${userId} does not exist`);
+    }
+
     await this.usersCollection.activateSubscription(userId, days, tier);
-    console.log(`Subscription activated for user ${userId}`);
+    console.log(`Subscription successfully activated for user ${userId}`);
+    
   } catch (error) {
     console.error(`Error activating subscription for user ${userId}:`, error);
-    throw new Error(`Failed to activate subscription: ${error}`);
+    throw new Error(`Failed to activate subscription: ${error instanceof Error ? error.message : error}`);
   }
 }
 
