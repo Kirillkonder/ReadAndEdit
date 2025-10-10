@@ -431,7 +431,7 @@ export async function showMySubscription(ctx: Context) {
           
           Для использования бота необходимо приобрести подписку.
           
-          💰 Стоимость: 1 Star
+          💰 Стоимость: 49 Stars
           ⏰ Срок: 30 дней
           
           После покупки подписки вы получите полный доступ к функциям бота.
@@ -461,7 +461,7 @@ export async function showMySubscription(ctx: Context) {
       dedent`
         💎 <b>Ежемесячная подписка</b>
         
-        💰 Стоимость: 1 Star
+        💰 Стоимость: 49 Stars
         ⏰ Срок: 30 дней
         
         <b>Что вы получите:</b>
@@ -475,7 +475,7 @@ export async function showMySubscription(ctx: Context) {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "💳 Оплатить 1 ⭐", callback_data: "pay_subscription" }], // Изменил текст кнопки
+            [{ text: "💳 Оплатить 49 ⭐", callback_data: "pay_subscription" }], // Возвращаем 49 Stars
             [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
         }

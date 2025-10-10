@@ -447,7 +447,7 @@ export class SubscriptionService {
   const title = "Ежемесячная подписка";
   const description = "Доступ к мониторингу сообщений на 30 дней";
   const payload = "subscription_monthly";
-  const price = 1; // 1 Star вместо 49
+  const price = 49; // Возвращаем 49 Stars
 
   await ctx.api.sendInvoice(
     ctx.chat!.id,
@@ -458,7 +458,7 @@ export class SubscriptionService {
     [
       {
         label: title,
-        amount: price, // 1 Star
+        amount: price, // 49 Stars
       },
     ],
     {
