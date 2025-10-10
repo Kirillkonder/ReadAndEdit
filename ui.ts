@@ -57,16 +57,23 @@ export async function handleCallbackQuery(ctx: Context) {
     }
 
     if (data === 'referral_system') {
-    await showReferralSystem(ctx);
-    await ctx.answerCallbackQuery();
-    return;
-  }
+      await showReferralSystem(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
 
     if (data === 'giftboom_system') {
-    await showGiftBoomSystem(ctx); // переименовываем функцию
-    await ctx.answerCallbackQuery();
-    return;
-  }
+      await showGiftBoomSystem(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    // ОБРАБОТКА ПРОВЕРКИ ПОДПИСКИ GIFTBOOM
+    if (data === 'check_giftboom_sub') {
+      await checkGiftBoomSubscription(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
 
     // Админские кнопки
     if (data.startsWith('admin_')) {
