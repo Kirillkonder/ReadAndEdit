@@ -282,13 +282,18 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         `;
       }
 
-      // Отправляем сразу полное сообщение без кнопки
+      // Отправляем сразу полное сообщение с кнопкой главного меню
       const notificationMessage = await ctx.api.sendMessage(
         userChatId,
         text,
         {
           parse_mode: "HTML",
-          link_preview_options: { is_disabled: true }
+          link_preview_options: { is_disabled: true },
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+            ]
+          }
         }
       );
 
@@ -388,13 +393,18 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
             <blockquote>${editedMessage.text}</blockquote>
           `;
 
-          // Отправляем сразу полное сообщение без кнопки
+          // Отправляем сразу полное сообщение с кнопкой главного меню
           await ctx.api.sendMessage(
             receiverId,
             text,
             {
               parse_mode: "HTML",
-              link_preview_options: { is_disabled: true }
+              link_preview_options: { is_disabled: true },
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+                ]
+              }
             }
           );
         }
@@ -412,4 +422,3 @@ export const updateHandlers: IUpdateHandler[] = [
   new BusinessConnectionHandler(),
   new BusinessImageMessageHandler()
 ]
-//dada
