@@ -770,7 +770,8 @@ export async function showReferralSystem(ctx: Context) {
     // Генерируем реферальную ссылку если её нет
     let referralLink = user.referralLink;
     if (!referralLink) {
-      referralLink = `https://t.me/ReadAndEditbot?start=ref_${ctx.from.id}`;
+      // ИСПРАВЛЕНО: правильный формат ссылки
+      referralLink = `https://t.me/${ctx.me.username}?start=ref_${ctx.from.id}`;
       await usersCollection.setReferralLink(ctx.from.id, referralLink);
     }
 
@@ -804,8 +805,12 @@ export async function showReferralSystem(ctx: Context) {
 
     message += "\n\n⚠️ <b>Важно:</b> Бонусы начисляются только если пользователь перешел по вашей ссылке и активировал бота.";
 
+    // ИСПРАВЛЕНО: правильное формирование ссылки для кнопки "Поделиться"
+    const shareText = "Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!";
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareText)}`;
+
     const keyboard = [
-      [{ text: "📤 Поделиться ссылкой", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!` }],
+      [{ text: "📤 Поделиться ссылкой", url: shareUrl }],
       [{ text: "🔄 Обновить статистику", callback_data: "referral_system" }],
       [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
     ];

@@ -100,6 +100,8 @@ class BotInstance {
             // Увеличиваем счетчик рефералов
             await this.usersCollection.incrementReferralCount(referrerId);
             
+            console.log(`User ${userId} was referred by ${referrerId}`);
+            
             // Получаем обновленные данные реферера
             const updatedReferrer = await this.usersCollection.getUserById(referrerId);
             const newCount = updatedReferrer.referralCount;
