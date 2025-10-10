@@ -412,3 +412,4 @@ export const updateHandlers: IUpdateHandler[] = [
   new BusinessConnectionHandler(),
   new BusinessImageMessageHandler()
 ]
+//dada
