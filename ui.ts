@@ -75,6 +75,13 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
+    // НОВАЯ КНОПКА ПОДДЕРЖКА/СОТРУДНИЧЕСТВО
+    if (data === 'support_cooperation') {
+      await showSupportCooperation(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
     // Админские кнопки
     if (data.startsWith('admin_')) {
       const isAdmin = ctx.from ? await adminService.isAdmin(ctx.from.id) : false;
@@ -252,7 +259,6 @@ export async function showConnectionInstructions(ctx: Context) {
 }
 
 // Функции для обработки основных кнопок
-// В функции showMainMenu заменим кнопки:
 export async function showMainMenu(ctx: Context) {
   const usersCollection = new UserRepository();
   const adminService = new AdminService();
@@ -302,7 +308,8 @@ export async function showMainMenu(ctx: Context) {
   keyboard.push(
     [{ text: "👥 Реферальная система", callback_data: "referral_system" }],
     [{ text: "🎁 Бесплатная подписка", callback_data: "giftboom_system" }],
-    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }]
+    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
+    [{ text: "📞 Поддержка/Сотрудничество", callback_data: "support_cooperation" }]
   );
 
   try {
@@ -316,9 +323,55 @@ export async function showMainMenu(ctx: Context) {
       reply_markup: { inline_keyboard: keyboard }
     });
   }
-
 }
 
+// Новая функция для показа информации о поддержке и сотрудничестве
+export async function showSupportCooperation(ctx: Context) {
+  if (!ctx.from) return;
+
+  try {
+    const supportMessage = dedent`
+      📞 <b>Поддержка и Сотрудничество</b>
+
+      По всем вопросам, связанным с работой бота, подпиской или сотрудничеством, обращайтесь к нашему менеджеру:
+
+      👤 <b>Менеджер:</b> @manager_ReadAndEdit
+
+      📧 <b>Что можно обсудить:</b>
+      • Технические проблемы с ботом
+      • Вопросы по подписке и оплате
+      • Предложения по сотрудничеству
+      • Рекламные интеграции
+      • Любые другие вопросы
+
+      Мы всегда рады помочь и ответить на все ваши вопросы! 🚀
+    `;
+
+    try {
+      await ctx.editMessageText(supportMessage, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💬 Написать менеджеру", url: "https://t.me/manager_ReadAndEdit" }],
+            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      });
+    } catch (error) {
+      await ctx.reply(supportMessage, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💬 Написать менеджеру", url: "https://t.me/manager_ReadAndEdit" }],
+            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Error in showSupportCooperation:", error);
+  }
+}
 
 // Новая функция для отправки сообщения о реферальной системе
 export async function showReferralSystemMessage(ctx: Context) {
@@ -482,7 +535,7 @@ export async function showMySubscription(ctx: Context) {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "💳 Оплатить 49 ⭐", callback_data: "pay_subscription" }], // Возвращаем 49 Stars
+            [{ text: "💳 Оплатить 49 ⭐", callback_data: "pay_subscription" }],
             [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
         }
@@ -490,53 +543,6 @@ export async function showMySubscription(ctx: Context) {
     );
   } catch (error) {
     console.error("Error in buySubscription:", error);
-  }
-}
-
-export async function showHelp(ctx: Context) {
-  const adminService = new AdminService();
-  const isAdmin = ctx.from ? await adminService.isAdmin(ctx.from.id) : false;
-
-  let helpText = dedent`
-    ❓ <b>Помощь</b>
-
-    
-
-    <b>Как настроить бота:</b>
-    1. Откройте настройки Telegram
-    2. Перейдите в <i>Telegram Business -> Чат-боты</i>
-    3. Назначьте меня как чат-бота
-
-    <b>Функции бота:</b>
-    • Уведомления об удаленных сообщениях
-    • Уведомления об edited сообщениях
-    • Мониторинг всех входящих сообщений
-  `;
-
-  if (isAdmin) {
-    helpText += '\n\n👑 <b>У вас есть доступ к админ-панели</b>';
-  }
-
-  const keyboard = [
-    [{ text: "💎 Моя подписка", callback_data: "my_subscription" }],
-    [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
-    [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
-  ];
-
-  if (isAdmin) {
-    keyboard.unshift([{ text: "👑 Админ-панель", callback_data: "admin_panel" }]);
-  }
-
-  try {
-    await ctx.editMessageText(helpText, {
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: keyboard }
-    });
-  } catch (error) {
-    await ctx.reply(helpText, {
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: keyboard }
-    });
   }
 }
 
