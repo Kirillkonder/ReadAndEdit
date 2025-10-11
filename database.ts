@@ -51,6 +51,7 @@ export class SQLiteDatabase {
         messageId INTEGER PRIMARY KEY,
         text TEXT NOT NULL,
         media TEXT,
+        voice TEXT,
         userId INTEGER NOT NULL,
         senderId INTEGER NOT NULL,
         senderName TEXT NOT NULL,
@@ -58,6 +59,7 @@ export class SQLiteDatabase {
         isEdited INTEGER DEFAULT 0,
         isDeleted INTEGER DEFAULT 0,
         hasMedia INTEGER DEFAULT 0,
+        hasVoice INTEGER DEFAULT 0,
         editedAt INTEGER,
         deletedAt INTEGER,
         sentAt INTEGER NOT NULL,
@@ -140,6 +142,25 @@ export class SQLiteDatabase {
         console.log("Column giftBoomBonusUsed already exists");
       }
     }
+
+    // Добавляем столбцы для голосовых сообщений если их нет
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN voice TEXT");
+      console.log("Column voice added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column voice already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN hasVoice INTEGER DEFAULT 0");
+      console.log("Column hasVoice added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column hasVoice already exists");
+      }
+    }
   }
 }
 
@@ -163,6 +184,7 @@ export interface IUser {
   referralCount: number;
   referralLink?: string;
 }
+
 export interface CreateUserDto {
   userId: number;
   firstName: string;
@@ -192,10 +214,12 @@ export interface IUserRepository {
   setReferralLink(userId: number, link: string): Promise<void>;
   getUserByReferralLink(link: string): Promise<IUser | null>;
 }
+
 export interface IMessage {
   messageId: number;
   text: string;
   media?: string;
+  voice?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
   userId: number;
   senderId: number;
   senderName: string;
@@ -203,6 +227,7 @@ export interface IMessage {
   isEdited: boolean;
   isDeleted: boolean;
   hasMedia: boolean;
+  hasVoice: boolean; // ДОБАВЛЯЕМ ФЛАГ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
   editedAt?: number;
   deletedAt?: number;
   sentAt: number;
@@ -214,6 +239,7 @@ export interface CreateMessageDto {
   messageId: number;
   text: string;
   media?: string;
+  voice?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
   userId: number;
   senderId: number;
   senderName: string;
@@ -546,6 +572,7 @@ export class MessagesRepository implements IMessagesRepository {
       isEdited: false,
       isDeleted: false,
       hasMedia: !!newMessageData.media,
+      hasVoice: !!newMessageData.voice, // ДОБАВЛЯЕМ ПРОВЕРКУ ГОЛОСОВОГО СООБЩЕНИЯ
       sentAt: Date.now(),
       editedMessages: [],
       notificationMessageId: undefined
@@ -553,17 +580,19 @@ export class MessagesRepository implements IMessagesRepository {
 
     await database.run(
       `INSERT INTO messages 
-       (messageId, text, media, userId, senderId, senderName, senderUsername, hasMedia, sentAt, editedMessages, notificationMessageId) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (messageId, text, media, voice, userId, senderId, senderName, senderUsername, hasMedia, hasVoice, sentAt, editedMessages, notificationMessageId) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         newMessageData.messageId,
         newMessageData.text,
         newMessageData.media || null,
+        newMessageData.voice || null, // ДОБАВЛЯЕМ ГОЛОСОВОЕ СООБЩЕНИЕ
         newMessageData.userId,
         newMessageData.senderId,
         newMessageData.senderName,
         newMessageData.senderUsername || null,
         newMessage.hasMedia ? 1 : 0,
+        newMessage.hasVoice ? 1 : 0, // ДОБАВЛЯЕМ ФЛАГ ГОЛОСОВОГО СООБЩЕНИЯ
         newMessage.sentAt,
         JSON.stringify(newMessage.editedMessages),
         null
@@ -591,6 +620,7 @@ export class MessagesRepository implements IMessagesRepository {
       messageId: message.messageId,
       text: message.text,
       media: message.media || undefined,
+      voice: message.voice || undefined, // ДОБАВЛЯЕМ ГОЛОСОВОЕ СООБЩЕНИЕ
       userId: message.userId,
       senderId: message.senderId,
       senderName: message.senderName,
@@ -598,6 +628,7 @@ export class MessagesRepository implements IMessagesRepository {
       isEdited: !!message.isEdited,
       isDeleted: !!message.isDeleted,
       hasMedia: !!message.hasMedia,
+      hasVoice: !!message.hasVoice, // ДОБАВЛЯЕМ ФЛАГ ГОЛОСОВОГО СООБЩЕНИЯ
       editedAt: message.editedAt || undefined,
       deletedAt: message.deletedAt || undefined,
       sentAt: message.sentAt,

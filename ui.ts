@@ -1,7 +1,7 @@
 // ui.ts - UI функции и меню
 import { Context } from "grammy";
 import dedent from "dedent";
-import { UserRepository } from "./database";
+import { UserRepository, MessagesRepository } from "./database";
 import { AdminService, SubscriptionService, formatDate } from "./services";
 import { InputFile } from "grammy";
 import * as fs from "fs";
@@ -10,12 +10,77 @@ import * as fs from "fs";
 export async function handleCallbackQuery(ctx: Context) {
   const adminService = new AdminService();
   const subscriptionService = new SubscriptionService();
+  const messagesCollection = new MessagesRepository();
   
   try {
     const data = ctx.callbackQuery?.data;
 
     if (!data) {
       await ctx.answerCallbackQuery();
+      return;
+    }
+
+    // ОБРАБОТКА КНОПКИ ПРОСЛУШИВАНИЯ ГОЛОСОВОГО СООБЩЕНИЯ
+    if (data.startsWith('play_voice_')) {
+      const messageId = parseInt(data.replace('play_voice_', ''));
+      
+      try {
+        const message = await messagesCollection.getById(messageId);
+        
+        if (message && message.voice) {
+          // Отправляем голосовое сообщение пользователю
+          await ctx.api.sendVoice(
+            ctx.from!.id,
+            message.voice,
+            {
+              caption: `🎤 Голосовое сообщение от ${message.senderName}`,
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+                ]
+              }
+            }
+          );
+          await ctx.answerCallbackQuery("🎤 Отправляю голосовое сообщение...");
+        } else {
+          await ctx.answerCallbackQuery("❌ Голосовое сообщение не найдено");
+        }
+      } catch (error) {
+        console.error("Error playing voice message:", error);
+        await ctx.answerCallbackQuery("❌ Ошибка при воспроизведении");
+      }
+      return;
+    }
+
+    // НОВАЯ КНОПКА ДЛЯ ПОКАЗА УДАЛЕННОЙ ФОТОГРАФИИ
+    if (data.startsWith('show_photo_')) {
+      const messageId = parseInt(data.replace('show_photo_', ''));
+      
+      try {
+        const message = await messagesCollection.getById(messageId);
+        
+        if (message && message.media) {
+          // Отправляем фотографию пользователю
+          await ctx.api.sendPhoto(
+            ctx.from!.id,
+            message.media,
+            {
+              caption: `🖼️ Удаленная фотография от ${message.senderName}`,
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+                ]
+              }
+            }
+          );
+          await ctx.answerCallbackQuery("🖼️ Отправляю фотографию...");
+        } else {
+          await ctx.answerCallbackQuery("❌ Фотография не найдена");
+        }
+      } catch (error) {
+        console.error("Error showing photo:", error);
+        await ctx.answerCallbackQuery("❌ Ошибка при загрузке фото");
+      }
       return;
     }
 
@@ -157,6 +222,8 @@ export async function showWelcomeMessage(ctx: Context) {
       • Уведомляю об удаленных сообщениях
       • Уведомляю об отредактированных сообщениях
       • Сохраняю историю всех изменений
+      • Отслеживаю голосовые сообщения
+      • Отслеживаю фотографии
       
       🚀 Я помогу вам не пропустить важные изменения в переписке с клиентами!
       
@@ -397,7 +464,7 @@ export async function showReferralSystemMessage(ctx: Context) {
       message = dedent`
         🎁 <b>Реферальная система</b>
 
-        ✅ У вас уже есть активная подписка!
+        ✅ У вас уже есть активная подписку!
 
         Спасибо за использование нашего бота! 🚀
       `;
@@ -528,6 +595,8 @@ export async function showMySubscription(ctx: Context) {
         • Уведомления об удаленных сообщениях
         • Уведомления об отредактированных сообщениях
         • Мониторинг всех входящих сообщений
+        • Отслеживание голосовых сообщений
+        • Отслеживание фотографий
         
         Нажмите кнопку ниже для оплаты.
       `,
@@ -835,4 +904,5 @@ export async function showReferralSystem(ctx: Context) {
   } catch (error) {
     console.error("Error in showReferralSystem:", error);
   }
+
 }

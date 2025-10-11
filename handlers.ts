@@ -165,9 +165,68 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
           senderName: ctx.from.first_name,
           senderUsername: ctx.from.username,
         });
+
+        console.log(`Photo message saved from user ${ctx.from.id} to ${user_chat_id}`);
       }
     } catch (error) {
       console.error("Error in BusinessImageMessageHandler:", error);
+    }
+  }
+}
+
+// НОВЫЙ ОБРАБОТЧИК ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
+export class BusinessVoiceMessageHandler implements IUpdateHandler {
+  private usersCollection = new UserRepository();
+  private messagesCollection = new MessagesRepository();
+  private subscriptionService = new SubscriptionService();
+
+  public updateName: FilterQuery = "business_message:voice";
+
+  public async run(ctx: Context) {
+    try {
+      const businessConnection = await ctx.getBusinessConnection();
+      const user_chat_id = businessConnection.user_chat_id;
+
+      if (ctx.businessMessage?.voice && ctx.from) {
+        // ИГНОРИРУЕМ сообщения от самого пользователя (владельца бота)
+        if (ctx.from.id === user_chat_id) {
+          return;
+        }
+
+        // Проверяем подписку пользователя
+        const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
+        if (!hasSubscription) {
+          console.log(`User ${user_chat_id} doesn't have active subscription, skipping voice message processing`);
+          return;
+        }
+
+        const { file_id, duration } = ctx.businessMessage.voice;
+        
+        // Create user if not exists
+        await this.usersCollection.createOrUpdate({
+          userId: user_chat_id,
+          firstName: "Business User",
+          lastName: "",
+          username: ""
+        });
+
+        await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
+
+        // Сохраняем голосовое сообщение в базу
+        await this.messagesCollection.create({
+          messageId: ctx.businessMessage.message_id,
+          userId: user_chat_id,
+          text: `🎤 Голосовое сообщение (${duration} сек)`, // Текст для отображения
+          voice: file_id, // Сохраняем file_id голосового сообщения
+          senderId: ctx.from.id,
+          senderName: ctx.from.first_name,
+          senderUsername: ctx.from.username,
+        });
+
+        console.log(`Voice message saved from user ${ctx.from.id} to ${user_chat_id}`);
+      }
+    } catch (error) {
+      console.error("Error in BusinessVoiceMessageHandler:", error);
     }
   }
 }
@@ -254,9 +313,24 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
       await this.messagesCollection.setAttribute(messageId, "isDeleted", true);
       await this.messagesCollection.setAttribute(messageId, "deletedAt", Date.now());
       
-      // СРАЗУ отправляем содержимое удаленного сообщения
+      // ОБРАБОТКА РАЗНЫХ ТИПОВ СООБЩЕНИЙ
       let text = '';
-      if (deletedMessage.media) {
+      let keyboard = [];
+      
+      if (deletedMessage.voice) {
+        text = dedent`
+          🗑️ <b>Удалено голосовое сообщение</b>
+          
+          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
+          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
+          🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
+          
+          🎤 <b>Тип:</b> Голосовое сообщение
+          ${deletedMessage.text ? `📝 <b>Описание:</b> ${deletedMessage.text}` : ''}
+        `;
+        keyboard.push([{ text: "🎤 Прослушать голосовое", callback_data: `play_voice_${messageId}` }]);
+      } else if (deletedMessage.media) {
         text = dedent`
           🗑️ <b>Удаленное сообщение с медиа</b>
           
@@ -265,9 +339,10 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
-          📝 <b>Текст сообщения:</b>
-          <blockquote>${deletedMessage.text || "Без текста"}</blockquote>
+          📸 <b>Тип:</b> Фотография
+          ${deletedMessage.text ? `📝 <b>Подпись:</b> ${deletedMessage.text}` : ''}
         `;
+        keyboard.push([{ text: "🖼️ Посмотреть фото", callback_data: `show_photo_${messageId}` }]);
       } else {
         text = dedent`
           🗑️ <b>Удаленное сообщение</b>
@@ -282,7 +357,9 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         `;
       }
 
-      // Отправляем сразу полное сообщение с кнопкой главного меню
+      keyboard.push([{ text: "🏠 Главное меню", callback_data: "main_menu" }]);
+
+      // Отправляем сразу полное сообщение с кнопками
       const notificationMessage = await ctx.api.sendMessage(
         userChatId,
         text,
@@ -290,9 +367,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
           parse_mode: "HTML",
           link_preview_options: { is_disabled: true },
           reply_markup: {
-            inline_keyboard: [
-              [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
-            ]
+            inline_keyboard: keyboard
           }
         }
       );
@@ -420,5 +495,6 @@ export const updateHandlers: IUpdateHandler[] = [
   new EditedBusinessMessageHandler(),
   new DeletedBusinessMessageHandler(),
   new BusinessConnectionHandler(),
-  new BusinessImageMessageHandler()
+  new BusinessImageMessageHandler(),
+  new BusinessVoiceMessageHandler() 
 ]
