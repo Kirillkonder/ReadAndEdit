@@ -52,6 +52,8 @@ export class SQLiteDatabase {
         text TEXT NOT NULL,
         media TEXT,
         voice TEXT,
+        video TEXT,
+        videoFile TEXT,
         userId INTEGER NOT NULL,
         senderId INTEGER NOT NULL,
         senderName TEXT NOT NULL,
@@ -60,6 +62,8 @@ export class SQLiteDatabase {
         isDeleted INTEGER DEFAULT 0,
         hasMedia INTEGER DEFAULT 0,
         hasVoice INTEGER DEFAULT 0,
+        hasVideo INTEGER DEFAULT 0,
+        hasVideoFile INTEGER DEFAULT 0,
         editedAt INTEGER,
         deletedAt INTEGER,
         sentAt INTEGER NOT NULL,
@@ -161,6 +165,90 @@ export class SQLiteDatabase {
         console.log("Column hasVoice already exists");
       }
     }
+
+    // Добавляем столбцы для видеосообщений если их нет
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN video TEXT");
+      console.log("Column video added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column video already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN hasVideo INTEGER DEFAULT 0");
+      console.log("Column hasVideo added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column hasVideo already exists");
+      }
+    }
+
+    // ДОБАВЛЯЕМ СТОЛБЦЫ ДЛЯ ОБЫЧНЫХ ВИДЕОФАЙЛОВ
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN videoFile TEXT");
+      console.log("Column videoFile added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column videoFile already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE messages ADD COLUMN hasVideoFile INTEGER DEFAULT 0");
+      console.log("Column hasVideoFile added to messages table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column hasVideoFile already exists");
+      }
+    }
+
+    // НОВЫЕ СТОЛБЦЫ ДЛЯ РЕФЕРАЛЬНОГО ЗАРАБОТКА
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN earnedStars INTEGER DEFAULT 0");
+      console.log("Column earnedStars added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column earnedStars already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN pendingWithdrawal INTEGER DEFAULT 0");
+      console.log("Column pendingWithdrawal added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column pendingWithdrawal already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN totalWithdrawn INTEGER DEFAULT 0");
+      console.log("Column totalWithdrawn added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column totalWithdrawn already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN withdrawalRequests TEXT DEFAULT '[]'");
+      console.log("Column withdrawalRequests added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column withdrawalRequests already exists");
+      }
+    }
+
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN awaitingWithdrawalAmount INTEGER DEFAULT 0");
+      console.log("Column awaitingWithdrawalAmount added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column awaitingWithdrawalAmount already exists");
+      }
+    }
   }
 }
 
@@ -183,6 +271,13 @@ export interface IUser {
   referredBy?: number;
   referralCount: number;
   referralLink?: string;
+
+  // НОВЫЕ ПОЛЯ ДЛЯ РЕФЕРАЛЬНОГО ЗАРАБОТКА
+  earnedStars: number;
+  pendingWithdrawal: number;
+  totalWithdrawn: number;
+  withdrawalRequests: string; // JSON массив заявок на вывод
+  awaitingWithdrawalAmount?: number;
 }
 
 export interface CreateUserDto {
@@ -213,13 +308,18 @@ export interface IUserRepository {
   incrementReferralCount(userId: number): Promise<void>;
   setReferralLink(userId: number, link: string): Promise<void>;
   getUserByReferralLink(link: string): Promise<IUser | null>;
+
+  // НОВЫЕ МЕТОДЫ ДЛЯ РЕФЕРАЛЬНОГО ЗАРАБОТКА
+  getUserAttribute(userId: number, key: string): Promise<any>;
 }
 
 export interface IMessage {
   messageId: number;
   text: string;
   media?: string;
-  voice?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
+  voice?: string;
+  video?: string;
+  videoFile?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ОБЫЧНЫХ ВИДЕО
   userId: number;
   senderId: number;
   senderName: string;
@@ -227,7 +327,9 @@ export interface IMessage {
   isEdited: boolean;
   isDeleted: boolean;
   hasMedia: boolean;
-  hasVoice: boolean; // ДОБАВЛЯЕМ ФЛАГ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
+  hasVoice: boolean;
+  hasVideo: boolean;
+  hasVideoFile: boolean; // ДОБАВЛЯЕМ ФЛАГ ДЛЯ ОБЫЧНЫХ ВИДЕО
   editedAt?: number;
   deletedAt?: number;
   sentAt: number;
@@ -239,7 +341,9 @@ export interface CreateMessageDto {
   messageId: number;
   text: string;
   media?: string;
-  voice?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ
+  voice?: string;
+  video?: string;
+  videoFile?: string; // ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ОБЫЧНЫХ ВИДЕО
   userId: number;
   senderId: number;
   senderName: string;
@@ -252,6 +356,10 @@ export interface IMessagesRepository {
   setAttribute(messageId: number, key: string, value: any, returnResult?: boolean): Promise<IMessage | void | null>;
   exists(messageId: number, throwError?: boolean): Promise<boolean>;
   messageEdited(messageId: number, oldMessageText: string, newMessageText: string): Promise<void>;
+  
+  // НОВЫЕ МЕТОДЫ ДЛЯ ЭКСПОРТА ПЕРЕПИСКИ
+  getMessagesByUserAndSender(userId: number, senderId: number): Promise<IMessage[]>;
+  getAllMessagesByUser(userId: number): Promise<IMessage[]>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -280,9 +388,9 @@ export class UserRepository implements IUserRepository {
     const isAdmin = userData.userId === MAIN_ADMIN_ID ? 1 : 0;
     
     await database.run(
-      `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed, referralCount) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0, 0]
+      `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed, referralCount, earnedStars, pendingWithdrawal, totalWithdrawn, withdrawalRequests) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0, 0, 0, 0, 0, '[]']
     );
     console.log(`User ${userData.userId} created successfully`);
   } else {
@@ -332,7 +440,13 @@ export class UserRepository implements IUserRepository {
     // ДОБАВЬ ЭТИ ПОЛЯ:
     referredBy: user.referredBy || undefined,
     referralCount: user.referralCount || 0,
-    referralLink: user.referralLink || undefined
+    referralLink: user.referralLink || undefined,
+    // НОВЫЕ ПОЛЯ ДЛЯ РЕФЕРАЛЬНОГО ЗАРАБОТКА
+    earnedStars: user.earnedStars || 0,
+    pendingWithdrawal: user.pendingWithdrawal || 0,
+    totalWithdrawn: user.totalWithdrawn || 0,
+    withdrawalRequests: user.withdrawalRequests || '[]',
+    awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0
   };
 }
 
@@ -442,48 +556,14 @@ export class UserRepository implements IUserRepository {
   const database = await this.db.connect();
   const users = await database.all('SELECT * FROM users ORDER BY createdAt DESC');
   
-  return users.map((user: any) => ({
-    userId: user.userId,
-    firstName: user.firstName,
-    lastName: user.lastName || undefined,
-    username: user.username || undefined,
-    createdAt: user.createdAt,
-    lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
-    subscriptionActive: !!user.subscriptionActive,
-    subscriptionExpires: user.subscriptionExpires || undefined,
-    subscriptionTier: user.subscriptionTier || 'free',
-    isAdmin: !!user.isAdmin,
-    trialUsed: !!user.trialUsed,
-    giftBoomBonusUsed: !!user.giftBoomBonusUsed,
-    // ДОБАВЬ ЭТИ ПОЛЯ:
-    referredBy: user.referredBy || undefined,
-    referralCount: user.referralCount || 0,
-    referralLink: user.referralLink || undefined
-  }));
+  return users.map((user: any) => this.mapUser(user));
 }
 
   public async getAllAdmins(): Promise<IUser[]> {
   const database = await this.db.connect();
   const admins = await database.all('SELECT * FROM users WHERE isAdmin = 1 ORDER BY createdAt DESC');
   
-  return admins.map((user: any) => ({
-    userId: user.userId,
-    firstName: user.firstName,
-    lastName: user.lastName || undefined,
-    username: user.username || undefined,
-    createdAt: user.createdAt,
-    lastReceiveMessageAt: user.lastReceiveMessageAt || undefined,
-    subscriptionActive: !!user.subscriptionActive,
-    subscriptionExpires: user.subscriptionExpires || undefined,
-    subscriptionTier: user.subscriptionTier || 'free',
-    isAdmin: !!user.isAdmin,
-    trialUsed: !!user.trialUsed,
-    giftBoomBonusUsed: !!user.giftBoomBonusUsed,
-    // ДОБАВЬ ЭТИ ПОЛЯ:
-    referredBy: user.referredBy || undefined,
-    referralCount: user.referralCount || 0,
-    referralLink: user.referralLink || undefined
-  }));
+  return admins.map((user: any) => this.mapUser(user));
 }
 
   public async makeAdmin(userId: number): Promise<void> {
@@ -539,6 +619,15 @@ export class UserRepository implements IUserRepository {
     await this.setAttribute(userId, 'referredBy', referrerId);
   }
 
+  public async getUserAttribute(userId: number, key: string): Promise<any> {
+    try {
+      const user = await this.getUserById(userId);
+      return (user as any)[key];
+    } catch (error) {
+      return null;
+    }
+  }
+
   private mapUser(user: any): IUser {
     return {
       userId: user.userId,
@@ -555,7 +644,13 @@ export class UserRepository implements IUserRepository {
       giftBoomBonusUsed: !!user.giftBoomBonusUsed,
       referredBy: user.referredBy || undefined,
       referralCount: user.referralCount || 0,
-      referralLink: user.referralLink || undefined
+      referralLink: user.referralLink || undefined,
+      // НОВЫЕ ПОЛЯ
+      earnedStars: user.earnedStars || 0,
+      pendingWithdrawal: user.pendingWithdrawal || 0,
+      totalWithdrawn: user.totalWithdrawn || 0,
+      withdrawalRequests: user.withdrawalRequests || '[]',
+      awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0
     };
   }
 
@@ -572,7 +667,9 @@ export class MessagesRepository implements IMessagesRepository {
       isEdited: false,
       isDeleted: false,
       hasMedia: !!newMessageData.media,
-      hasVoice: !!newMessageData.voice, // ДОБАВЛЯЕМ ПРОВЕРКУ ГОЛОСОВОГО СООБЩЕНИЯ
+      hasVoice: !!newMessageData.voice,
+      hasVideo: !!newMessageData.video,
+      hasVideoFile: !!newMessageData.videoFile, // ДОБАВЛЯЕМ ФЛАГ ДЛЯ ОБЫЧНЫХ ВИДЕО
       sentAt: Date.now(),
       editedMessages: [],
       notificationMessageId: undefined
@@ -580,19 +677,23 @@ export class MessagesRepository implements IMessagesRepository {
 
     await database.run(
       `INSERT INTO messages 
-       (messageId, text, media, voice, userId, senderId, senderName, senderUsername, hasMedia, hasVoice, sentAt, editedMessages, notificationMessageId) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (messageId, text, media, voice, video, videoFile, userId, senderId, senderName, senderUsername, hasMedia, hasVoice, hasVideo, hasVideoFile, sentAt, editedMessages, notificationMessageId) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         newMessageData.messageId,
         newMessageData.text,
         newMessageData.media || null,
-        newMessageData.voice || null, // ДОБАВЛЯЕМ ГОЛОСОВОЕ СООБЩЕНИЕ
+        newMessageData.voice || null,
+        newMessageData.video || null,
+        newMessageData.videoFile || null, // ДОБАВЛЯЕМ ОБЫЧНОЕ ВИДЕО
         newMessageData.userId,
         newMessageData.senderId,
         newMessageData.senderName,
         newMessageData.senderUsername || null,
         newMessage.hasMedia ? 1 : 0,
-        newMessage.hasVoice ? 1 : 0, // ДОБАВЛЯЕМ ФЛАГ ГОЛОСОВОГО СООБЩЕНИЯ
+        newMessage.hasVoice ? 1 : 0,
+        newMessage.hasVideo ? 1 : 0,
+        newMessage.hasVideoFile ? 1 : 0, // ДОБАВЛЯЕМ ФЛАГ ОБЫЧНОГО ВИДЕО
         newMessage.sentAt,
         JSON.stringify(newMessage.editedMessages),
         null
@@ -620,7 +721,9 @@ export class MessagesRepository implements IMessagesRepository {
       messageId: message.messageId,
       text: message.text,
       media: message.media || undefined,
-      voice: message.voice || undefined, // ДОБАВЛЯЕМ ГОЛОСОВОЕ СООБЩЕНИЕ
+      voice: message.voice || undefined,
+      video: message.video || undefined,
+      videoFile: message.videoFile || undefined, // ДОБАВЛЯЕМ ОБЫЧНОЕ ВИДЕО
       userId: message.userId,
       senderId: message.senderId,
       senderName: message.senderName,
@@ -628,7 +731,9 @@ export class MessagesRepository implements IMessagesRepository {
       isEdited: !!message.isEdited,
       isDeleted: !!message.isDeleted,
       hasMedia: !!message.hasMedia,
-      hasVoice: !!message.hasVoice, // ДОБАВЛЯЕМ ФЛАГ ГОЛОСОВОГО СООБЩЕНИЯ
+      hasVoice: !!message.hasVoice,
+      hasVideo: !!message.hasVideo,
+      hasVideoFile: !!message.hasVideoFile, // ДОБАВЛЯЕМ ФЛАГ ОБЫЧНОГО ВИДЕО
       editedAt: message.editedAt || undefined,
       deletedAt: message.deletedAt || undefined,
       sentAt: message.sentAt,
@@ -700,5 +805,70 @@ export class MessagesRepository implements IMessagesRepository {
        WHERE messageId = ?`,
       [newMessageText, Date.now(), JSON.stringify(updatedEditedMessages), messageId]
     );
+  }
+
+  // НОВЫЕ МЕТОДЫ ДЛЯ ЭКСПОРТА ПЕРЕПИСКИ
+  public async getMessagesByUserAndSender(userId: number, senderId: number): Promise<IMessage[]> {
+    const database = await this.db.connect();
+    const messages = await database.all(
+      'SELECT * FROM messages WHERE userId = ? AND senderId = ? ORDER BY sentAt ASC',
+      [userId, senderId]
+    );
+    
+    return messages.map((message: any) => ({
+      messageId: message.messageId,
+      text: message.text,
+      media: message.media || undefined,
+      voice: message.voice || undefined,
+      video: message.video || undefined,
+      videoFile: message.videoFile || undefined,
+      userId: message.userId,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      senderUsername: message.senderUsername || undefined,
+      isEdited: !!message.isEdited,
+      isDeleted: !!message.isDeleted,
+      hasMedia: !!message.hasMedia,
+      hasVoice: !!message.hasVoice,
+      hasVideo: !!message.hasVideo,
+      hasVideoFile: !!message.hasVideoFile,
+      editedAt: message.editedAt || undefined,
+      deletedAt: message.deletedAt || undefined,
+      sentAt: message.sentAt,
+      editedMessages: JSON.parse(message.editedMessages || '[]'),
+      notificationMessageId: message.notificationMessageId || undefined
+    }));
+  }
+
+  public async getAllMessagesByUser(userId: number): Promise<IMessage[]> {
+    const database = await this.db.connect();
+    const messages = await database.all(
+      'SELECT * FROM messages WHERE userId = ? ORDER BY sentAt ASC',
+      [userId]
+    );
+    
+    return messages.map((message: any) => ({
+      messageId: message.messageId,
+      text: message.text,
+      media: message.media || undefined,
+      voice: message.voice || undefined,
+      video: message.video || undefined,
+      videoFile: message.videoFile || undefined,
+      userId: message.userId,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      senderUsername: message.senderUsername || undefined,
+      isEdited: !!message.isEdited,
+      isDeleted: !!message.isDeleted,
+      hasMedia: !!message.hasMedia,
+      hasVoice: !!message.hasVoice,
+      hasVideo: !!message.hasVideo,
+      hasVideoFile: !!message.hasVideoFile,
+      editedAt: message.editedAt || undefined,
+      deletedAt: message.deletedAt || undefined,
+      sentAt: message.sentAt,
+      editedMessages: JSON.parse(message.editedMessages || '[]'),
+      notificationMessageId: message.notificationMessageId || undefined
+    }));
   }
 }

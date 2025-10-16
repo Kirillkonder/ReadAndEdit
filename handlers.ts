@@ -132,11 +132,6 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
       const user_chat_id = businessConnection.user_chat_id;
 
       if (ctx.businessMessage?.photo && ctx.from) {
-        // ИГНОРИРУЕМ сообщения от самого пользователя (владельца бота)
-        if (ctx.from.id === user_chat_id) {
-          return;
-        }
-
         // Проверяем подписку пользователя
         const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
         if (!hasSubscription) {
@@ -156,6 +151,7 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
 
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
+        // СОХРАНЯЕМ В БАЗУ ВСЕ сообщения (и свои, и чужие) для экспорта
         await this.messagesCollection.create({
           messageId: ctx.businessMessage.message_id,
           userId: user_chat_id,
@@ -188,11 +184,6 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
       const user_chat_id = businessConnection.user_chat_id;
 
       if (ctx.businessMessage?.voice && ctx.from) {
-        // ИГНОРИРУЕМ сообщения от самого пользователя (владельца бота)
-        if (ctx.from.id === user_chat_id) {
-          return;
-        }
-
         // Проверяем подписку пользователя
         const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
         if (!hasSubscription) {
@@ -212,12 +203,12 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
 
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
-        // Сохраняем голосовое сообщение в базу
+        // СОХРАНЯЕМ В БАЗУ ВСЕ голосовые сообщения (и свои, и чужие) для экспорта
         await this.messagesCollection.create({
           messageId: ctx.businessMessage.message_id,
           userId: user_chat_id,
-          text: `🎤 Голосовое сообщение (${duration} сек)`, // Текст для отображения
-          voice: file_id, // Сохраняем file_id голосового сообщения
+          text: `🎤 Голосовое сообщение (${duration} сек)`,
+          voice: file_id,
           senderId: ctx.from.id,
           senderName: ctx.from.first_name,
           senderUsername: ctx.from.username,
@@ -227,6 +218,110 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
       }
     } catch (error) {
       console.error("Error in BusinessVoiceMessageHandler:", error);
+    }
+  }
+}
+
+// НОВЫЙ ОБРАБОТЧИК ДЛЯ ВИДЕОСООБЩЕНИЙ (КРУЖКОВ)
+export class BusinessVideoMessageHandler implements IUpdateHandler {
+  private usersCollection = new UserRepository();
+  private messagesCollection = new MessagesRepository();
+  private subscriptionService = new SubscriptionService();
+
+  public updateName: FilterQuery = "business_message:video_note";
+
+  public async run(ctx: Context) {
+    try {
+      const businessConnection = await ctx.getBusinessConnection();
+      const user_chat_id = businessConnection.user_chat_id;
+
+      if (ctx.businessMessage?.video_note && ctx.from) {
+        // Проверяем подписку пользователя
+        const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
+        if (!hasSubscription) {
+          console.log(`User ${user_chat_id} doesn't have active subscription, skipping video message processing`);
+          return;
+        }
+
+        const { file_id, duration } = ctx.businessMessage.video_note;
+        
+        // Create user if not exists
+        await this.usersCollection.createOrUpdate({
+          userId: user_chat_id,
+          firstName: "Business User",
+          lastName: "",
+          username: ""
+        });
+
+        await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
+
+        // СОХРАНЯЕМ В БАЗУ ВСЕ видеосообщения (и свои, и чужие) для экспорта
+        await this.messagesCollection.create({
+          messageId: ctx.businessMessage.message_id,
+          userId: user_chat_id,
+          text: `🎥 Видеосообщение (${duration} сек)`,
+          video: file_id,
+          senderId: ctx.from.id,
+          senderName: ctx.from.first_name,
+          senderUsername: ctx.from.username,
+        });
+
+        console.log(`Video message saved from user ${ctx.from.id} to ${user_chat_id}`);
+      }
+    } catch (error) {
+      console.error("Error in BusinessVideoMessageHandler:", error);
+    }
+  }
+}
+
+// НОВЫЙ ОБРАБОТЧИК ДЛЯ ОБЫЧНЫХ ВИДЕОФАЙЛОВ
+export class BusinessVideoFileHandler implements IUpdateHandler {
+  private usersCollection = new UserRepository();
+  private messagesCollection = new MessagesRepository();
+  private subscriptionService = new SubscriptionService();
+
+  public updateName: FilterQuery = "business_message:video";
+
+  public async run(ctx: Context) {
+    try {
+      const businessConnection = await ctx.getBusinessConnection();
+      const user_chat_id = businessConnection.user_chat_id;
+
+      if (ctx.businessMessage?.video && ctx.from) {
+        // Проверяем подписку пользователя
+        const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
+        if (!hasSubscription) {
+          console.log(`User ${user_chat_id} doesn't have active subscription, skipping video file processing`);
+          return;
+        }
+
+        const { file_id, duration, file_name, mime_type } = ctx.businessMessage.video;
+        
+        // Create user if not exists
+        await this.usersCollection.createOrUpdate({
+          userId: user_chat_id,
+          firstName: "Business User",
+          lastName: "",
+          username: ""
+        });
+
+        await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
+
+        // СОХРАНЯЕМ В БАЗУ ВСЕ обычные видео (и свои, и чужие) для экспорта
+        await this.messagesCollection.create({
+          messageId: ctx.businessMessage.message_id,
+          userId: user_chat_id,
+          text: `🎬 Видеофайл: ${file_name || 'Без названия'} (${duration} сек, ${mime_type || 'Неизвестный формат'})`,
+          videoFile: file_id,
+          senderId: ctx.from.id,
+          senderName: ctx.from.first_name,
+          senderUsername: ctx.from.username,
+        });
+
+        console.log(`Video file saved from user ${ctx.from.id} to ${user_chat_id}`);
+      }
+    } catch (error) {
+      console.error("Error in BusinessVideoFileHandler:", error);
     }
   }
 }
@@ -246,11 +341,6 @@ export class BusinessMessageHandler implements IUpdateHandler {
       const businessConnectionId = ctx.businessMessage?.business_connection_id;
       
       if (businessConnectionId && ctx.businessMessage && ctx.from) {
-        // ИГНОРИРУЕМ сообщения от самого пользователя (владельца бота)
-        if (ctx.from.id === user_chat_id) {
-          return;
-        }
-
         // Проверяем подписку пользователя
         const hasSubscription = await this.subscriptionService.checkAccess(user_chat_id);
         if (!hasSubscription) {
@@ -271,6 +361,7 @@ export class BusinessMessageHandler implements IUpdateHandler {
         
         if (ctx.businessMessage.text) {
           const { text, message_id } = ctx.businessMessage;
+          // СОХРАНЯЕМ В БАЗУ ВСЕ сообщения (и свои, и чужие) для экспорта
           await this.messagesCollection.create({
             messageId: message_id,
             userId: user_chat_id,
@@ -305,14 +396,16 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         return;
       }
 
-      // ИГНОРИРУЕМ удаление собственных сообщений пользователя
-      if (deletedMessage.senderId === userChatId) {
-        return;
-      }
-
+      // ОБНОВЛЯЕМ В БАЗЕ ВСЕ сообщения (помечаем как удаленные)
       await this.messagesCollection.setAttribute(messageId, "isDeleted", true);
       await this.messagesCollection.setAttribute(messageId, "deletedAt", Date.now());
       
+      // НО УВЕДОМЛЕНИЯ ОТПРАВЛЯЕМ ТОЛЬКО ЕСЛИ СООБЩЕНИЕ ОТ ДРУГОГО ПОЛЬЗОВАТЕЛЯ
+      if (deletedMessage.senderId === userChatId) {
+        // Это сообщение от самого владельца бота - не отправляем уведомление
+        return;
+      }
+
       // ОБРАБОТКА РАЗНЫХ ТИПОВ СООБЩЕНИЙ
       let text = '';
       let keyboard = [];
@@ -343,6 +436,32 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
           ${deletedMessage.text ? `📝 <b>Подпись:</b> ${deletedMessage.text}` : ''}
         `;
         keyboard.push([{ text: "🖼️ Посмотреть фото", callback_data: `show_photo_${messageId}` }]);
+      } else if (deletedMessage.video) {
+        text = dedent`
+          🗑️ <b>Удалено видеосообщение</b>
+          
+          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
+          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
+          🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
+          
+          🎥 <b>Тип:</b> Видеосообщение (кружок)
+          ${deletedMessage.text ? `📝 <b>Описание:</b> ${deletedMessage.text}` : ''}
+        `;
+        keyboard.push([{ text: "🎥 Посмотреть видео", callback_data: `show_video_${messageId}` }]);
+      } else if (deletedMessage.videoFile) {
+        text = dedent`
+          🗑️ <b>Удалено видео</b>
+          
+          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
+          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
+          🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
+          
+          🎬 <b>Тип:</b> Обычное видео
+          ${deletedMessage.text ? `📝 <b>Описание:</b> ${deletedMessage.text}` : ''}
+        `;
+        keyboard.push([{ text: "🎬 Посмотреть видео", callback_data: `show_video_file_${messageId}` }]);
       } else {
         text = dedent`
           🗑️ <b>Удаленное сообщение</b>
@@ -359,7 +478,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
 
       keyboard.push([{ text: "🏠 Главное меню", callback_data: "main_menu" }]);
 
-      // Отправляем сразу полное сообщение с кнопками
+      // Отправляем уведомление только для сообщений от других пользователей
       const notificationMessage = await ctx.api.sendMessage(
         userChatId,
         text,
@@ -428,25 +547,22 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
           console.log(`User ${receiverId} doesn't have active subscription, skipping edited message processing`);
           return;
         }
-
-        // ИГНОРИРУЕМ редактирование собственных сообщений пользователя
-        if (from?.id === receiverId) {
-          return;
-        }
         
         const oldMessage = await this.messagesCollection.getById(message_id);
       
         if (newMessageText && oldMessage) {
-          // ИГНОРИРУЕМ редактирование собственных сообщений
-          if (oldMessage.senderId === receiverId) {
-            return;
-          }
-
+          // ОБНОВЛЯЕМ В БАЗЕ ВСЕ сообщения
           await this.messagesCollection.messageEdited(
             message_id,
             oldMessage.text,
             newMessageText
           );
+
+          // НО УВЕДОМЛЕНИЯ ОТПРАВЛЯЕМ ТОЛЬКО ЕСЛИ СООБЩЕНИЕ ОТ ДРУГОГО ПОЛЬЗОВАТЕЛЯ
+          if (oldMessage.senderId === receiverId) {
+            // Это сообщение от самого владельца бота - не отправляем уведомление
+            return;
+          }
 
           // СРАЗУ отправляем полную информацию об редактировании
           const editedMessage = await this.messagesCollection.getById(message_id);
@@ -468,7 +584,7 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
             <blockquote>${editedMessage.text}</blockquote>
           `;
 
-          // Отправляем сразу полное сообщение с кнопкой главного меню
+          // Отправляем уведомление только для сообщений от других пользователей
           await ctx.api.sendMessage(
             receiverId,
             text,
@@ -496,5 +612,7 @@ export const updateHandlers: IUpdateHandler[] = [
   new DeletedBusinessMessageHandler(),
   new BusinessConnectionHandler(),
   new BusinessImageMessageHandler(),
-  new BusinessVoiceMessageHandler() 
+  new BusinessVoiceMessageHandler(),
+  new BusinessVideoMessageHandler(),
+  new BusinessVideoFileHandler() // ДОБАВЛЯЕМ НОВЫЙ ОБРАБОТЧИК ОБЫЧНЫХ ВИДЕО
 ]

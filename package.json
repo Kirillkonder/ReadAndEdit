@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/archiver": "^6.0.3",
     "@types/node": "^22.18.8",
     "esbuild": "^0.25.4",
     "ts-node": "^10.9.2",
@@ -20,6 +21,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "dedent": "^1.7.0",
     "dotenv": "^16.6.1",
     "grammy": "^1.38.3",

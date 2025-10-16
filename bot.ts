@@ -5,9 +5,10 @@ dotenv.config();
 import { Bot, Context } from "grammy";
 import dedent from "dedent";
 import { UserRepository, IUserRepository } from './database';
-import { AdminService, SubscriptionService } from './services';
+import { AdminService, SubscriptionService, ReferralService } from './services';
 import { updateHandlers } from "./handlers";
 import { handleCallbackQuery, showMainMenu, showWelcomeMessage } from './ui';
+import { ExportService } from './exportService';
 
 // Main Bot Class
 class BotInstance {
@@ -15,6 +16,8 @@ class BotInstance {
   private usersCollection: IUserRepository;
   private subscriptionService = new SubscriptionService();
   private adminService = new AdminService();
+  private referralService = new ReferralService();
+  private exportService = new ExportService();
 
   constructor() {
     const botToken = process.env.BOT_TOKEN;
@@ -48,8 +51,8 @@ class BotInstance {
     this.bot.on("pre_checkout_query", (ctx) => this.handlePreCheckoutQuery(ctx));
     this.bot.on("message:successful_payment", (ctx) => this.handleSuccessfulPayment(ctx));
     
-    // Обработчик обычных текстовых сообщений для админских функций
-    this.bot.on("message:text", (ctx) => this.handleAdminTextCommands(ctx));
+    // Обработчик обычных текстовых сообщений для админских функций и экспорта
+    this.bot.on("message:text", (ctx) => this.handleTextCommands(ctx));
     
     updateHandlers.forEach(handler => {
       const middlewares = handler.middlewares ?? [];
@@ -169,6 +172,19 @@ class BotInstance {
     await this.subscriptionService.activateSubscription(ctx.from.id);
     console.log(`Subscription activated for user ${ctx.from.id}`);
 
+    // НОВЫЙ КОД: Начисляем реферальное вознаграждение
+    try {
+      const user = await this.usersCollection.getUserById(ctx.from.id);
+      if (user.referredBy) {
+        const purchaseAmount = 49; // Стоимость подписки в stars
+        await this.referralService.addReferralEarnings(user.referredBy, purchaseAmount);
+        
+        console.log(`Реферальное вознаграждение начислено пользователю ${user.referredBy}`);
+      }
+    } catch (refError) {
+      console.error('Ошибка при начислении реферального вознаграждения:', refError);
+    }
+
     // Получаем обновленные данные пользователя
     const usersCollection = new UserRepository();
     const user = await usersCollection.getUserById(ctx.from.id);
@@ -245,16 +261,33 @@ class BotInstance {
   }
 }
 
-  private async handleAdminTextCommands(ctx: Context) {
+  private async handleTextCommands(ctx: Context) {
     try {
       if (!ctx.from || !ctx.message?.text) return;
 
-      // Проверяем, является ли пользователь админом
-      const isAdmin = await this.adminService.isAdmin(ctx.from.id);
-      if (!isAdmin) return;
-
       const text = ctx.message.text.trim();
       
+      // Проверяем, ожидает ли пользователь ввода суммы для вывода
+      const user = await this.usersCollection.getUserById(ctx.from.id);
+      const awaitingWithdrawal = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingWithdrawalAmount');
+      
+      if (awaitingWithdrawal) {
+        await this.handleWithdrawalAmountInput(ctx, text);
+        return;
+      }
+      
+      // Проверяем, является ли пользователь админом для админских команд
+      const isAdmin = await this.adminService.isAdmin(ctx.from.id);
+      
+      // Обработка команды экспорта (пользователь ввел username)
+      if (text.startsWith('@') || /^[a-zA-Z0-9_]{5,32}$/.test(text)) {
+        await this.exportService.exportChatHistory(ctx, text);
+        return;
+      }
+
+      // Если не админ - выходим
+      if (!isAdmin) return;
+
       // Обработка выдачи подписки (формат: "123456789 30" или "123456789 -1")
       const subMatch = text.match(/^(\d+)\s+(-?\d+)$/);
       if (subMatch) {
@@ -283,9 +316,103 @@ class BotInstance {
       }
 
     } catch (error) {
-      console.error("Error in handleAdminTextCommands:", error);
+      console.error("Error in handleTextCommands:", error);
     }
   }
+
+  private async handleWithdrawalAmountInput(ctx: Context, amountText: string) {
+  const usersCollection = new UserRepository();
+  const referralService = new ReferralService();
+  
+  // ДОБАВЛЯЕМ ПРОВЕРКУ НА СУЩЕСТВОВАНИЕ ctx.from
+  if (!ctx.from) {
+    console.error("ctx.from is undefined in handleWithdrawalAmountInput");
+    return;
+  }
+  
+  try {
+    const amount = parseInt(amountText);
+    
+    if (isNaN(amount) || amount < 100) {
+      await ctx.reply("❌ Неверная сумма. Минимальный вывод - 100 ⭐");
+      return;
+    }
+
+    const user = await usersCollection.getUserById(ctx.from.id);
+    
+    if (user.earnedStars < amount) {
+      await ctx.reply(`❌ Недостаточно средств. Ваш баланс: ${user.earnedStars} ⭐`);
+      return;
+    }
+
+    // Создаем заявку на вывод
+    await referralService.createWithdrawalRequest(ctx.from.id, amount);
+    
+    // Сбрасываем флаг ожидания
+    await usersCollection.setAttribute(ctx.from.id, 'awaitingWithdrawalAmount', 0);
+    
+    await ctx.reply(
+      dedent`
+        ✅ <b>Заявка на вывод создана!</b>
+        
+        💰 Сумма: ${amount} ⭐
+        ⏳ Статус: Ожидает одобрения
+        🕐 Вывод будет произведен в течение 24 часов
+        
+        Спасибо за использование нашего бота! 🚀
+      `,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "👥 Реферальная система", callback_data: "referral_system" }],
+            [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+          ]
+        }
+      }
+    );
+    
+    // Уведомляем админов о новой заявке
+    await this.notifyAdminsAboutWithdrawal(ctx.from.id, amount);
+    
+  } catch (error: any) {
+    await ctx.reply(`❌ Ошибка: ${error.message}`);
+  }
+}
+
+  private async notifyAdminsAboutWithdrawal(userId: number, amount: number) {
+  try {
+    const adminService = new AdminService();
+    const usersCollection = new UserRepository();
+    const allAdmins = await usersCollection.getAllAdmins();
+    
+    const user = await usersCollection.getUserById(userId);
+    const userName = `${user.firstName} ${user.lastName || ''}`.trim();
+    const userInfo = user.username ? `@${user.username}` : `ID: ${userId}`;
+    
+    const notificationText = dedent`
+      💰 <b>Новая заявка на вывод</b>
+      
+      👤 Пользователь: ${userName} (${userInfo})
+      💎 Сумма: ${amount} ⭐
+      🆔 ID заявки: ${Date.now()}
+      
+      Для обработки перейдите в админ-панель.
+    `;
+    
+    for (const admin of allAdmins) {
+      try {
+        await this.bot.api.sendMessage(admin.userId, notificationText, {
+          parse_mode: "HTML"
+        });
+      } catch (error) {
+        console.error(`Не удалось уведомить админа ${admin.userId}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error("Ошибка при уведомлении админов:", error);
+  }
+}
 }
 
 // Main execution

@@ -2,25 +2,77 @@
 import { Context } from "grammy";
 import dedent from "dedent";
 import { UserRepository, MessagesRepository } from "./database";
-import { AdminService, SubscriptionService, formatDate } from "./services";
+import { AdminService, SubscriptionService, formatDate, ReferralService } from "./services";
 import { InputFile } from "grammy";
 import * as fs from "fs";
+import { ExportService } from './exportService';
 
 // Обработчик callback-запросов для кнопок
 export async function handleCallbackQuery(ctx: Context) {
+  console.log(`📲 CALLBACK RECEIVED: ${ctx.callbackQuery?.data}`);
+  
   const adminService = new AdminService();
   const subscriptionService = new SubscriptionService();
+  const referralService = new ReferralService();
   const messagesCollection = new MessagesRepository();
   
   try {
     const data = ctx.callbackQuery?.data;
-
     if (!data) {
       await ctx.answerCallbackQuery();
       return;
     }
 
-    // ОБРАБОТКА КНОПКИ ПРОСЛУШИВАНИЯ ГОЛОСОВОГО СООБЩЕНИЯ
+    // ОБРАБОТКА VIDEO_FILE - ПЕРВОЙ!
+    if (data.startsWith('show_video_file_')) {
+      console.log(`🎬 VIDEO FILE BUTTON CLICKED: ${data}`);
+      const messageId = parseInt(data.replace('show_video_file_', ''));
+      console.log(`🔍 Looking for message ID: ${messageId}`);
+      
+      try {
+        const message = await messagesCollection.getById(messageId);
+        console.log(`📋 Message from DB:`, {
+          found: !!message,
+          messageId: message?.messageId,
+          hasVideoFile: message?.hasVideoFile,
+          videoFile: message?.videoFile ? `EXISTS (${message.videoFile})` : 'NULL',
+          senderName: message?.senderName
+        });
+        
+        if (message && message.videoFile) {
+          console.log(`📤 Sending video with file_id: ${message.videoFile}`);
+          
+          try {
+            await ctx.api.sendVideo(
+              ctx.from!.id,
+              message.videoFile,
+              {
+                caption: `🎬 Удаленное видео от ${message.senderName}`,
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+                  ]
+                }
+              }
+            );
+            console.log(`✅ Video sent successfully`);
+            await ctx.answerCallbackQuery("🎬 Отправляю видео...");
+          } catch (sendError) {
+            console.error(`❌ Error sending video:`, sendError);
+            await ctx.answerCallbackQuery("❌ Ошибка отправки видео");
+          }
+        } else {
+          console.log(`❌ Video file not found in DB for message ${messageId}`);
+          await ctx.answerCallbackQuery("❌ Видео не найдено в базе");
+        }
+      } catch (error) {
+        console.error("💥 Error showing video file:", error);
+        await ctx.answerCallbackQuery("❌ Ошибка при загрузке видео");
+      }
+      return;
+    }
+
+    // ОСТАЛЬНЫЕ ОБРАБОТЧИКИ
     if (data.startsWith('play_voice_')) {
       const messageId = parseInt(data.replace('play_voice_', ''));
       
@@ -28,7 +80,6 @@ export async function handleCallbackQuery(ctx: Context) {
         const message = await messagesCollection.getById(messageId);
         
         if (message && message.voice) {
-          // Отправляем голосовое сообщение пользователю
           await ctx.api.sendVoice(
             ctx.from!.id,
             message.voice,
@@ -52,7 +103,6 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
-    // НОВАЯ КНОПКА ДЛЯ ПОКАЗА УДАЛЕННОЙ ФОТОГРАФИИ
     if (data.startsWith('show_photo_')) {
       const messageId = parseInt(data.replace('show_photo_', ''));
       
@@ -60,7 +110,6 @@ export async function handleCallbackQuery(ctx: Context) {
         const message = await messagesCollection.getById(messageId);
         
         if (message && message.media) {
-          // Отправляем фотографию пользователю
           await ctx.api.sendPhoto(
             ctx.from!.id,
             message.media,
@@ -80,6 +129,35 @@ export async function handleCallbackQuery(ctx: Context) {
       } catch (error) {
         console.error("Error showing photo:", error);
         await ctx.answerCallbackQuery("❌ Ошибка при загрузке фото");
+      }
+      return;
+    }
+
+    if (data.startsWith('show_video_')) {
+      const messageId = parseInt(data.replace('show_video_', ''));
+      
+      try {
+        const message = await messagesCollection.getById(messageId);
+        
+        if (message && message.video) {
+          await ctx.api.sendVideoNote(
+            ctx.from!.id,
+            message.video,
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
+                ]
+              }
+            }
+          );
+          await ctx.answerCallbackQuery("🎥 Отправляю видеосообщение...");
+        } else {
+          await ctx.answerCallbackQuery("❌ Видеосообщение не найдено");
+        }
+      } catch (error) {
+        console.error("Error showing video message:", error);
+        await ctx.answerCallbackQuery("❌ Ошибка при загрузке видео");
       }
       return;
     }
@@ -133,16 +211,48 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
-    // ОБРАБОТКА ПРОВЕРКИ ПОДПИСКИ GIFTBOOM
     if (data === 'check_giftboom_sub') {
       await checkGiftBoomSubscription(ctx);
       await ctx.answerCallbackQuery();
       return;
     }
 
-    // НОВАЯ КНОПКА ПОДДЕРЖКА/СОТРУДНИЧЕСТВО
     if (data === 'support_cooperation') {
       await showSupportCooperation(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data === 'export_chat') {
+      const exportService = new ExportService();
+      await exportService.startExportProcess(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    // НОВЫЕ ОБРАБОТЧИКИ ДЛЯ ВЫВОДА СРЕДСТВ
+    if (data === 'request_withdrawal') {
+      await handleWithdrawalRequest(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data === 'admin_withdrawals') {
+      await showAdminWithdrawals(ctx);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data.startsWith('admin_approve_withdrawal_')) {
+      const requestId = parseInt(data.replace('admin_approve_withdrawal_', ''));
+      await adminApproveWithdrawal(ctx, requestId);
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (data.startsWith('admin_reject_withdrawal_')) {
+      const requestId = parseInt(data.replace('admin_reject_withdrawal_', ''));
+      await adminRejectWithdrawal(ctx, requestId);
       await ctx.answerCallbackQuery();
       return;
     }
@@ -184,10 +294,8 @@ export async function handleCallbackQuery(ctx: Context) {
         const parts = data.split('_');
         const userId = parseInt(parts[2]);
         if (parts.length === 3) {
-          // admin_remove_123 - удаление подписки
           await adminService.removeSubscription(ctx, userId);
         } else if (parts.length === 4 && parts[1] === 'remove' && parts[2] === 'admin') {
-          // admin_remove_admin_123 - удаление админа
           const userId = parseInt(parts[3]);
           await adminService.removeAdmin(ctx, userId);
         }
@@ -224,6 +332,8 @@ export async function showWelcomeMessage(ctx: Context) {
       • Сохраняю историю всех изменений
       • Отслеживаю голосовые сообщения
       • Отслеживаю фотографии
+      • Отслеживаю видеосообщения (кружки)
+      • Отслеживаю обычные видео
       
       🚀 Я помогу вам не пропустить важные изменения в переписке с клиентами!
       
@@ -374,6 +484,7 @@ export async function showMainMenu(ctx: Context) {
   
   keyboard.push(
     [{ text: "👥 Реферальная система", callback_data: "referral_system" }],
+    [{ text: "💾 Сохранить переписку", callback_data: "export_chat" }],
     [{ text: "🎁 Бесплатная подписка", callback_data: "giftboom_system" }],
     [{ text: "🛒 Купить подписку", callback_data: "buy_subscription" }],
     [{ text: "📞 Поддержка/Сотрудничество", callback_data: "support_cooperation" }]
@@ -597,6 +708,8 @@ export async function showMySubscription(ctx: Context) {
         • Мониторинг всех входящих сообщений
         • Отслеживание голосовых сообщений
         • Отслеживание фотографий
+        • Отслеживание видеосообщений (кружков)
+        • Отслеживание обычных видео
         
         Нажмите кнопку ниже для оплаты.
       `,
@@ -836,6 +949,7 @@ export async function checkGiftBoomSubscription(ctx: Context) {
 // Новая функция для реферальной системы
 export async function showReferralSystem(ctx: Context) {
   const usersCollection = new UserRepository();
+  const referralService = new ReferralService();
   
   if (!ctx.from) return;
 
@@ -851,6 +965,9 @@ export async function showReferralSystem(ctx: Context) {
     }
 
     const referralCount = user.referralCount || 0;
+    const earnedStars = user.earnedStars || 0;
+    const pendingWithdrawal = user.pendingWithdrawal || 0;
+    const totalWithdrawn = user.totalWithdrawn || 0;
     
     // Определяем бонусы
     const bonuses = [
@@ -868,6 +985,14 @@ export async function showReferralSystem(ctx: Context) {
 
       📊 <b>Статистика:</b>
       • Приглашено пользователей: ${referralCount}
+      • Заработано stars: ${earnedStars} ⭐
+      • На выводе: ${pendingWithdrawal} ⭐
+      • Всего выведено: ${totalWithdrawn} ⭐
+
+      💰 <b>Условия заработка:</b>
+      • 30% от каждой покупки вашего реферала
+      • Минимальный вывод: 100 ⭐
+      • Вывод в течение 24 часов после одобрения
 
       🎁 <b>Бонусы за приглашения:</b>
     `;
@@ -884,8 +1009,10 @@ export async function showReferralSystem(ctx: Context) {
     const shareText = "Привет! Попробуй этого бота для мониторинга сообщений в Telegram Business!";
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareText)}`;
 
-    const keyboard = [
+    // ИСПРАВЛЕНО: явно указываем тип массива кнопок
+    const keyboard: any[] = [
       [{ text: "📤 Поделиться ссылкой", url: shareUrl }],
+      [{ text: "💰 Запросить вывод", callback_data: "request_withdrawal" }], // КНОПКА ВСЕГДА ВИДНА
       [{ text: "🔄 Обновить статистику", callback_data: "referral_system" }],
       [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
     ];
@@ -904,5 +1031,201 @@ export async function showReferralSystem(ctx: Context) {
   } catch (error) {
     console.error("Error in showReferralSystem:", error);
   }
+}
 
+// Функции для обработки вывода средств
+async function handleWithdrawalRequest(ctx: Context) {
+  const usersCollection = new UserRepository();
+  const referralService = new ReferralService();
+  
+  if (!ctx.from) return;
+
+  try {
+    const user = await usersCollection.getUserById(ctx.from.id);
+    const earnedStars = user.earnedStars || 0;
+
+    // УБИРАЕМ ПРОВЕРКУ НА 100 ЗВЕЗД - КНОПКА ВСЕГДА ДОСТУПНА
+    if (earnedStars < 100) {
+      await ctx.editMessageText(
+        `❌ <b>Недостаточно средств для вывода</b>\n\nМинимальная сумма вывода: 100 ⭐\n\nВаш баланс: ${earnedStars} ⭐\n\nПриглашайте больше друзей чтобы заработать больше stars! 🚀`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📤 Поделиться ссылкой", callback_data: "referral_system" }],
+              [{ text: "⬅️ Назад к реферальной системе", callback_data: "referral_system" }]
+            ]
+          }
+        }
+      );
+      return;
+    }
+
+    await ctx.editMessageText(
+      dedent`
+        💰 <b>Запрос на вывод средств</b>
+        
+        💎 Доступно для вывода: ${earnedStars} ⭐
+        💳 Минимальная сумма: 100 ⭐
+        
+        Введите сумму для вывода (от 100 до ${earnedStars}):
+      `,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "❌ Отмена", callback_data: "referral_system" }]
+          ]
+        }
+      }
+    );
+
+    // Сохраняем состояние ожидания ввода суммы
+    await usersCollection.setAttribute(ctx.from.id, 'awaitingWithdrawalAmount', 1);
+    
+  } catch (error) {
+    console.error("Error in handleWithdrawalRequest:", error);
+    await ctx.editMessageText("❌ Произошла ошибка при запросе вывода");
+  }
+}
+
+async function showAdminWithdrawals(ctx: Context) {
+  const adminService = new AdminService();
+  const referralService = new ReferralService();
+  
+  if (!ctx.from) return;
+
+  try {
+    const isAdmin = await adminService.isAdmin(ctx.from.id);
+    if (!isAdmin) {
+      await ctx.answerCallbackQuery("❌ Нет доступа");
+      return;
+    }
+
+    const pendingRequests = await referralService.getPendingWithdrawals();
+    
+    if (pendingRequests.length === 0) {
+      await ctx.editMessageText(
+        "📋 <b>Заявки на вывод</b>\n\nНет pending заявок на вывод.",
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔄 Обновить", callback_data: "admin_withdrawals" }],
+              [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      );
+      return;
+    }
+
+    let message = `📋 <b>Заявки на вывод</b> (всего: ${pendingRequests.length})\n\n`;
+    
+    pendingRequests.forEach((request, index) => {
+      const userInfo = request.username ? `@${request.username}` : `ID: ${request.userId}`;
+      message += dedent`
+        ${index + 1}. <b>Заявка #${request.id}</b>
+           👤 ${request.userName} (${userInfo})
+           💰 ${request.amount} ⭐
+           📅 ${new Date(request.createdAt).toLocaleString('ru-RU')}
+        
+      `;
+    });
+
+    const keyboard = [];
+    
+    pendingRequests.forEach(request => {
+      keyboard.push([
+        { 
+          text: `✅ Одобрить #${request.id}`, 
+          callback_data: `admin_approve_withdrawal_${request.id}` 
+        },
+        { 
+          text: `❌ Отклонить #${request.id}`, 
+          callback_data: `admin_reject_withdrawal_${request.id}` 
+        }
+      ]);
+    });
+
+    keyboard.push(
+      [{ text: "🔄 Обновить", callback_data: "admin_withdrawals" }],
+      [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+    );
+
+    await ctx.editMessageText(message, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    
+  } catch (error) {
+    console.error("Error in showAdminWithdrawals:", error);
+    await ctx.editMessageText("❌ Ошибка при загрузке заявок на вывод");
+  }
+}
+
+async function adminApproveWithdrawal(ctx: Context, requestId: number) {
+  const referralService = new ReferralService();
+  const adminService = new AdminService();
+  
+  if (!ctx.from) return;
+
+  try {
+    const isAdmin = await adminService.isAdmin(ctx.from.id);
+    if (!isAdmin) {
+      await ctx.answerCallbackQuery("❌ Нет доступа");
+      return;
+    }
+
+    await referralService.processWithdrawal(requestId, ctx.from.id, true);
+    
+    await ctx.editMessageText(
+      "✅ <b>Заявка на вывод одобрена</b>\n\nСредства переведены пользователю.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад к заявкам", callback_data: "admin_withdrawals" }]
+          ]
+        }
+      }
+    );
+    
+  } catch (error) {
+    console.error("Error approving withdrawal:", error);
+    await ctx.answerCallbackQuery("❌ Ошибка при одобрении заявки");
+  }
+}
+
+async function adminRejectWithdrawal(ctx: Context, requestId: number) {
+  const referralService = new ReferralService();
+  const adminService = new AdminService();
+  
+  if (!ctx.from) return;
+
+  try {
+    const isAdmin = await adminService.isAdmin(ctx.from.id);
+    if (!isAdmin) {
+      await ctx.answerCallbackQuery("❌ Нет доступа");
+      return;
+    }
+
+    await referralService.processWithdrawal(requestId, ctx.from.id, false);
+    
+    await ctx.editMessageText(
+      "❌ <b>Заявка на вывод отклонена</b>\n\nСредства возвращены на баланс пользователя.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад к заявкам", callback_data: "admin_withdrawals" }]
+          ]
+        }
+      }
+    );
+    
+  } catch (error) {
+    console.error("Error rejecting withdrawal:", error);
+    await ctx.answerCallbackQuery("❌ Ошибка при отклонении заявки");
+  }
 }

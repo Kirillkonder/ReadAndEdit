@@ -94,6 +94,7 @@ export class AdminService {
             [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
             [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
             [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
+            [{ text: "💰 Заявки на вывод", callback_data: "admin_withdrawals" }],
             [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
             [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
           ]
@@ -338,6 +339,8 @@ export class AdminService {
           💎 Подписка: ${subscriptionInfo}
           🏷️ Тариф: ${user.subscriptionTier}
           👥 Роль: ${adminStatus} ${isMainAdmin ? '(ГЛАВНЫЙ)' : ''}
+          💰 Заработано stars: ${user.earnedStars || 0} ⭐
+          📊 Рефералов: ${user.referralCount || 0}
         `,
         {
           parse_mode: "HTML",
@@ -514,4 +517,136 @@ export class SubscriptionService {
     return bonusDays;
   }
 
+}
+
+// Реферальный сервис для обработки выплат
+export class ReferralService {
+  private usersCollection = new UserRepository();
+
+  // Начисляем 30% от покупки реферала
+  public async addReferralEarnings(referrerId: number, purchaseAmount: number): Promise<void> {
+    try {
+      const earnings = Math.floor(purchaseAmount * 0.3); // 30% от суммы
+      const referrer = await this.usersCollection.getUserById(referrerId);
+      
+      const newEarnedStars = (referrer.earnedStars || 0) + earnings;
+      await this.usersCollection.setAttribute(referrerId, 'earnedStars', newEarnedStars);
+      
+      console.log(`Начислено ${earnings} stars рефереру ${referrerId} за покупку реферала`);
+    } catch (error) {
+      console.error(`Ошибка при начислении реферального вознаграждения:`, error);
+    }
+  }
+
+  // Создание заявки на вывод
+  public async createWithdrawalRequest(userId: number, amount: number): Promise<boolean> {
+    try {
+      const user = await this.usersCollection.getUserById(userId);
+      
+      if (amount < 100) {
+        throw new Error("Минимальная сумма вывода - 100 stars");
+      }
+      
+      if (user.earnedStars < amount) {
+        throw new Error("Недостаточно stars для вывода");
+      }
+
+      // Создаем заявку на вывод
+      const request = {
+        id: Date.now(),
+        userId: userId,
+        amount: amount,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        userName: `${user.firstName} ${user.lastName || ''}`.trim(),
+        username: user.username
+      };
+
+      // Обновляем балансы
+      const newEarnedStars = user.earnedStars - amount;
+      const newPendingWithdrawal = (user.pendingWithdrawal || 0) + amount;
+      
+      await this.usersCollection.setAttribute(userId, 'earnedStars', newEarnedStars);
+      await this.usersCollection.setAttribute(userId, 'pendingWithdrawal', newPendingWithdrawal);
+
+      // Добавляем заявку в историю
+      const withdrawalRequests = JSON.parse(user.withdrawalRequests || '[]');
+      withdrawalRequests.push(request);
+      await this.usersCollection.setAttribute(userId, 'withdrawalRequests', JSON.stringify(withdrawalRequests));
+
+      return true;
+    } catch (error) {
+      console.error(`Ошибка при создании заявки на вывод:`, error);
+      throw error;
+    }
+  }
+
+  // Получение всех заявок на вывод (для админов)
+  public async getPendingWithdrawals(): Promise<any[]> {
+    try {
+      const allUsers = await this.usersCollection.getAllUsers();
+      const pendingRequests: any[] = [];
+
+      for (const user of allUsers) {
+        if (user.withdrawalRequests && user.withdrawalRequests !== '[]') {
+          const requests = JSON.parse(user.withdrawalRequests);
+          const userPendingRequests = requests.filter((req: any) => req.status === 'pending');
+          pendingRequests.push(...userPendingRequests);
+        }
+      }
+
+      return pendingRequests.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    } catch (error) {
+      console.error('Ошибка при получении заявок на вывод:', error);
+      return [];
+    }
+  }
+
+  // Обработка заявки на вывод админом
+  public async processWithdrawal(requestId: number, adminId: number, approve: boolean): Promise<void> {
+    try {
+      const allUsers = await this.usersCollection.getAllUsers();
+      
+      for (const user of allUsers) {
+        if (user.withdrawalRequests && user.withdrawalRequests !== '[]') {
+          const requests = JSON.parse(user.withdrawalRequests);
+          const requestIndex = requests.findIndex((req: any) => req.id === requestId);
+          
+          if (requestIndex !== -1) {
+            const request = requests[requestIndex];
+            
+            if (approve) {
+              // Одобряем вывод
+              requests[requestIndex].status = 'approved';
+              requests[requestIndex].processedAt = new Date().toISOString();
+              requests[requestIndex].processedBy = adminId;
+              
+              const newPendingWithdrawal = (user.pendingWithdrawal || 0) - request.amount;
+              const newTotalWithdrawn = (user.totalWithdrawn || 0) + request.amount;
+              
+              await this.usersCollection.setAttribute(user.userId, 'pendingWithdrawal', newPendingWithdrawal);
+              await this.usersCollection.setAttribute(user.userId, 'totalWithdrawn', newTotalWithdrawn);
+            } else {
+              // Отклоняем вывод - возвращаем stars
+              requests[requestIndex].status = 'rejected';
+              requests[requestIndex].processedAt = new Date().toISOString();
+              requests[requestIndex].processedBy = adminId;
+              
+              const newEarnedStars = (user.earnedStars || 0) + request.amount;
+              const newPendingWithdrawal = (user.pendingWithdrawal || 0) - request.amount;
+              
+              await this.usersCollection.setAttribute(user.userId, 'earnedStars', newEarnedStars);
+              await this.usersCollection.setAttribute(user.userId, 'pendingWithdrawal', newPendingWithdrawal);
+            }
+            
+            await this.usersCollection.setAttribute(user.userId, 'withdrawalRequests', JSON.stringify(requests));
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при обработке заявки на вывод:', error);
+      throw error;
+    }
+  }
 }
