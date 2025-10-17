@@ -262,72 +262,72 @@ class BotInstance {
 }
 
   private async handleTextCommands(ctx: Context) {
-    try {
-      if (!ctx.from || !ctx.message?.text) return;
+  try {
+    if (!ctx.from || !ctx.message?.text) return;
 
-      const text = ctx.message.text.trim();
-      
-      // Проверяем, ожидает ли пользователь ввода суммы для вывода
-      const user = await this.usersCollection.getUserById(ctx.from.id);
-      const awaitingWithdrawal = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingWithdrawalAmount');
-      
-      if (awaitingWithdrawal) {
-        await this.handleWithdrawalAmountInput(ctx, text);
-        return;
-      }
-      
-      // Проверяем, является ли пользователь админом для админских команд
-      const isAdmin = await this.adminService.isAdmin(ctx.from.id);
-      
-      // НОВЫЙ КОД: Проверяем, ожидает ли админ ввода сообщения для рассылки
-      const awaitingBroadcast = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingBroadcastMessage');
-      
-      if (isAdmin && awaitingBroadcast) {
-        await this.adminService.broadcastMessage(ctx, text);
-        await this.usersCollection.setAttribute(ctx.from.id, 'awaitingBroadcastMessage', 0);
-        return;
-      }
-      
-      // Обработка команды экспорта (пользователь ввел username)
-      if (text.startsWith('@') || /^[a-zA-Z0-9_]{5,32}$/.test(text)) {
-        await this.exportService.exportChatHistory(ctx, text);
-        return;
-      }
-
-      // Если не админ - выходим
-      if (!isAdmin) return;
-
-      // Обработка выдачи подписки (формат: "123456789 30" или "123456789 -1")
-      const subMatch = text.match(/^(\d+)\s+(-?\d+)$/);
-      if (subMatch) {
-        const targetUserId = parseInt(subMatch[1]);
-        const days = parseInt(subMatch[2]);
-        
-        await this.adminService.giveSubscription(ctx, targetUserId, days);
-        return;
-      }
-
-      // Обработка удаления подписки (формат: "123456789")
-      const userIdMatch = text.match(/^(\d+)$/);
-      if (userIdMatch) {
-        const targetUserId = parseInt(userIdMatch[1]);
-        
-        // Проверяем, существует ли пользователь
-        try {
-          const user = await this.usersCollection.getUserById(targetUserId);
-          
-          // Показываем информацию о пользователе
-          await this.adminService.showUserInfo(ctx, targetUserId);
-        } catch (error) {
-          await ctx.reply("❌ Пользователь с таким ID не найден.");
-        }
-        return;
-      }
-
-    } catch (error) {
-      console.error("Error in handleTextCommands:", error);
+    const text = ctx.message.text.trim();
+    
+    // Проверяем, ожидает ли пользователь ввода суммы для вывода
+    const user = await this.usersCollection.getUserById(ctx.from.id);
+    const awaitingWithdrawal = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingWithdrawalAmount');
+    
+    if (awaitingWithdrawal) {
+      await this.handleWithdrawalAmountInput(ctx, text);
+      return;
     }
+    
+    // Проверяем, является ли пользователь админом для админских команд
+    const isAdmin = await this.adminService.isAdmin(ctx.from.id);
+    
+    // Обработка команды экспорта (пользователь ввел username) - ДОЛЖНО БЫТЬ ПЕРВЫМ!
+    if (text.startsWith('@') || /^[a-zA-Z0-9_]{5,32}$/.test(text)) {
+      await this.exportService.exportChatHistory(ctx, text);
+      return;
+    }
+
+    // Если не админ - выходим
+    if (!isAdmin) return;
+
+    // ТЕПЕРЬ проверяем, ожидает ли админ ввода сообщения для рассылки
+    const awaitingBroadcast = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingBroadcastMessage');
+    
+    if (awaitingBroadcast) {
+      await this.adminService.broadcastMessage(ctx, text);
+      await this.usersCollection.setAttribute(ctx.from.id, 'awaitingBroadcastMessage', 0);
+      return;
+    }
+
+    // Обработка выдачи подписки (формат: "123456789 30" или "123456789 -1")
+    const subMatch = text.match(/^(\d+)\s+(-?\d+)$/);
+    if (subMatch) {
+      const targetUserId = parseInt(subMatch[1]);
+      const days = parseInt(subMatch[2]);
+      
+      await this.adminService.giveSubscription(ctx, targetUserId, days);
+      return;
+    }
+
+    // Обработка удаления подписки (формат: "123456789")
+    const userIdMatch = text.match(/^(\d+)$/);
+    if (userIdMatch) {
+      const targetUserId = parseInt(userIdMatch[1]);
+      
+      // Проверяем, существует ли пользователь
+      try {
+        const user = await this.usersCollection.getUserById(targetUserId);
+        
+        // Показываем информацию о пользователе
+        await this.adminService.showUserInfo(ctx, targetUserId);
+      } catch (error) {
+        await ctx.reply("❌ Пользователь с таким ID не найден.");
+      }
+      return;
+    }
+
+  } catch (error) {
+    console.error("Error in handleTextCommands:", error);
   }
+}
 
   private async handleWithdrawalAmountInput(ctx: Context, amountText: string) {
   const usersCollection = new UserRepository();

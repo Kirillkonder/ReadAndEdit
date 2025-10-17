@@ -275,55 +275,58 @@ export class AdminService {
   }
 
   async broadcastMessage(ctx: Context, messageText: string): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
+  if (!await this.isAdmin(ctx.from!.id)) return;
 
-    try {
-      const usersCollection = new UserRepository();
-      const allUsers = await usersCollection.getAllUsers();
-      
-      let successCount = 0;
-      let failCount = 0;
-      
-      // Отправляем сообщение о начале рассылки
-      const statusMessage = await ctx.reply(`🔄 Начинаю рассылку сообщения для ${allUsers.length} пользователей...`);
+  try {
+    // СБРАСЫВАЕМ ФЛАГ СРАЗУ, чтобы избежать повторной отправки
+    const usersCollection = new UserRepository();
+    await usersCollection.setAttribute(ctx.from!.id, 'awaitingBroadcastMessage', 0);
+    
+    const allUsers = await usersCollection.getAllUsers();
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    // Отправляем сообщение о начале рассылки
+    const statusMessage = await ctx.reply(`🔄 Начинаю рассылку сообщения для ${allUsers.length} пользователей...`);
 
-      for (const user of allUsers) {
-        try {
-          await ctx.api.sendMessage(
-            user.userId,
-            `📢 <b>Важное сообщение от администрации:</b>\n\n${messageText}`,
-            { parse_mode: "HTML" }
-          );
-          successCount++;
-          
-          // Небольшая задержка чтобы не превысить лимиты Telegram
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (error) {
-          console.error(`Не удалось отправить сообщение пользователю ${user.userId}:`, error);
-          failCount++;
+    for (const user of allUsers) {
+      try {
+        await ctx.api.sendMessage(
+          user.userId,
+          `📢 <b>Важное сообщение от администрации:</b>\n\n${messageText}`,
+          { parse_mode: "HTML" }
+        );
+        successCount++;
+        
+        // Небольшая задержка чтобы не превысить лимиты Telegram
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Не удалось отправить сообщение пользователю ${user.userId}:`, error);
+        failCount++;
+      }
+    }
+
+    // Обновляем статус рассылки
+    await ctx.api.editMessageText(
+      ctx.chat!.id,
+      statusMessage.message_id,
+      `✅ <b>Рассылка завершена!</b>\n\n📊 Результаты:\n• Успешно: ${successCount}\n• Не удалось: ${failCount}\n• Всего: ${allUsers.length}`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+          ]
         }
       }
+    );
 
-      // Обновляем статус рассылки
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        statusMessage.message_id,
-        `✅ <b>Рассылка завершена!</b>\n\n📊 Результаты:\n• Успешно: ${successCount}\n• Не удалось: ${failCount}\n• Всего: ${allUsers.length}`,
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
-            ]
-          }
-        }
-      );
-
-    } catch (error) {
-      console.error("Error in broadcastMessage:", error);
-      await ctx.reply("❌ Произошла ошибка при рассылке сообщений.");
-    }
+  } catch (error) {
+    console.error("Error in broadcastMessage:", error);
+    await ctx.reply("❌ Произошла ошибка при рассылке сообщений.");
   }
+}
 
   async giveSubscription(ctx: Context, userId: number, days: number): Promise<void> {
   if (!await this.isAdmin(ctx.from!.id)) return;
