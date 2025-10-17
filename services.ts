@@ -105,55 +105,101 @@ export class AdminService {
   }
 
   async showUsersList(ctx: Context): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
+  if (!await this.isAdmin(ctx.from!.id)) return;
 
-    const users = await this.usersCollection.getAllUsers();
+  const users = await this.usersCollection.getAllUsers();
+  
+  let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
+  
+  users.slice(0, 50).forEach((user, index) => {
+    const status = user.subscriptionActive ? "✅" : "❌";
+    const adminStatus = user.isAdmin ? "👑" : "";
     
-    let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
+    // Экранируем специальные HTML символы в именах пользователей
+    const safeFirstName = user.firstName
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
     
-    users.slice(0, 50).forEach((user, index) => {
-      const status = user.subscriptionActive ? "✅" : "❌";
-      const adminStatus = user.isAdmin ? "👑" : "";
-      const username = user.username ? `@${user.username}` : "нет username";
-      message += `${index + 1}. ${status} ${adminStatus} ${user.firstName} (ID: ${user.userId}) - ${username}\n`;
-    });
+    const safeLastName = user.lastName 
+      ? user.lastName
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;')
+      : '';
+    
+    const username = user.username ? `@${user.username}` : "нет username";
+    
+    const fullName = safeLastName 
+      ? `${safeFirstName} ${safeLastName}` 
+      : safeFirstName;
+    
+    message += `${index + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
+  });
 
-    if (users.length > 50) {
-      message += `\n... и еще ${users.length - 50} пользователей`;
-    }
-
-    await ctx.reply(message, { 
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-        ]
-      }
-    });
+  if (users.length > 50) {
+    message += `\n... и еще ${users.length - 50} пользователей`;
   }
+
+  await ctx.reply(message, { 
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
 
   async showAdminsList(ctx: Context): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
+  if (!await this.isAdmin(ctx.from!.id)) return;
 
-    const admins = await this.usersCollection.getAllAdmins();
+  const admins = await this.usersCollection.getAllAdmins();
+  
+  let message = `👑 <b>Список администраторов</b> (всего: ${admins.length})\n\n`;
+  
+  admins.forEach((admin, index) => {
+    const mainAdmin = admin.userId === MAIN_ADMIN_ID ? " [ГЛАВНЫЙ]" : "";
     
-    let message = `👑 <b>Список администраторов</b> (всего: ${admins.length})\n\n`;
+    // Экранируем специальные HTML символы
+    const safeFirstName = admin.firstName
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
     
-    admins.forEach((admin, index) => {
-      const mainAdmin = admin.userId === MAIN_ADMIN_ID ? " [ГЛАВНЫЙ]" : "";
-      const username = admin.username ? `@${admin.username}` : "нет username";
-      message += `${index + 1}. ${admin.firstName} (ID: ${admin.userId}) - ${username}${mainAdmin}\n`;
-    });
+    const safeLastName = admin.lastName 
+      ? admin.lastName
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;')
+      : '';
+    
+    const username = admin.username ? `@${admin.username}` : "нет username";
+    
+    const fullName = safeLastName 
+      ? `${safeFirstName} ${safeLastName}` 
+      : safeFirstName;
+    
+    message += `${index + 1}. ${fullName} (ID: ${admin.userId}) - ${username}${mainAdmin}\n`;
+  });
 
-    await ctx.reply(message, { 
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-        ]
-      }}
-    );
-  }
+  await ctx.reply(message, { 
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+      ]
+    }}
+  );
+}
 
 
   async showGiveSubscriptionMenu(ctx: Context): Promise<void> {
@@ -387,58 +433,75 @@ export class AdminService {
   }
 
   async showUserInfo(ctx: Context, userId: number): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) return;
+  if (!await this.isAdmin(ctx.from!.id)) return;
 
-    try {
-      const user = await this.usersCollection.getUserById(userId);
-      const hasActiveSubscription = await this.usersCollection.checkSubscription(userId);
-      
-      let subscriptionInfo = "❌ Нет активной подписки";
-      if (hasActiveSubscription && user.subscriptionExpires) {
-        const expiresDate = new Date(user.subscriptionExpires);
-        const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
-        subscriptionInfo = `✅ Активна (осталось ${daysLeft} дней, до ${expiresDate.toLocaleDateString('ru-RU')})`;
-      }
-
-      const adminStatus = user.isAdmin ? "👑 Администратор" : "👤 Пользователь";
-      const isMainAdmin = userId === MAIN_ADMIN_ID;
-
-      await ctx.reply(
-        dedent`
-          👤 <b>Информация о пользователе</b>
-          
-          🆔 ID: <code>${user.userId}</code>
-          📛 Имя: ${user.firstName} ${user.lastName || ''}
-          🔗 Username: ${user.username ? '@' + user.username : 'не указан'}
-          📅 Зарегистрирован: ${formatDate(user.createdAt)}
-          💎 Подписка: ${subscriptionInfo}
-          🏷️ Тариф: ${user.subscriptionTier}
-          👥 Роль: ${adminStatus} ${isMainAdmin ? '(ГЛАВНЫЙ)' : ''}
-          💰 Заработано stars: ${user.earnedStars || 0} ⭐
-          📊 Рефералов: ${user.referralCount || 0}
-        `,
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "✅ Выдать подписку", callback_data: `admin_give_30_${userId}` },
-                { text: "❌ Удалить подписку", callback_data: `admin_remove_${userId}` }
-              ],
-              user.isAdmin && !isMainAdmin ? [
-                { text: "❌ Убрать админа", callback_data: `admin_remove_admin_${userId}` }
-              ] : !user.isAdmin ? [
-                { text: "👑 Сделать админом", callback_data: `admin_make_admin_${userId}` }
-              ] : [],
-              [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
-            ].filter(Boolean)
-          }
-        }
-      );
-    } catch (error) {
-      await ctx.reply("❌ Пользователь не найден.");
+  try {
+    const user = await this.usersCollection.getUserById(userId);
+    const hasActiveSubscription = await this.usersCollection.checkSubscription(userId);
+    
+    let subscriptionInfo = "❌ Нет активной подписки";
+    if (hasActiveSubscription && user.subscriptionExpires) {
+      const expiresDate = new Date(user.subscriptionExpires);
+      const daysLeft = Math.ceil((user.subscriptionExpires - Date.now()) / (1000 * 60 * 60 * 24));
+      subscriptionInfo = `✅ Активна (осталось ${daysLeft} дней, до ${expiresDate.toLocaleDateString('ru-RU')})`;
     }
+
+    const adminStatus = user.isAdmin ? "👑 Администратор" : "👤 Пользователь";
+    const isMainAdmin = userId === MAIN_ADMIN_ID;
+
+    // Экранируем специальные HTML символы
+    const safeFirstName = user.firstName
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    
+    const safeLastName = user.lastName 
+      ? user.lastName
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;')
+      : '';
+
+    await ctx.reply(
+      dedent`
+        👤 <b>Информация о пользователе</b>
+        
+        🆔 ID: <code>${user.userId}</code>
+        📛 Имя: ${safeFirstName} ${safeLastName}
+        🔗 Username: ${user.username ? '@' + user.username : 'не указан'}
+        📅 Зарегистрирован: ${formatDate(user.createdAt)}
+        💎 Подписка: ${subscriptionInfo}
+        🏷️ Тариф: ${user.subscriptionTier}
+        👥 Роль: ${adminStatus} ${isMainAdmin ? '(ГЛАВНЫЙ)' : ''}
+        💰 Заработано stars: ${user.earnedStars || 0} ⭐
+        📊 Рефералов: ${user.referralCount || 0}
+      `,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Выдать подписку", callback_data: `admin_give_30_${userId}` },
+              { text: "❌ Удалить подписку", callback_data: `admin_remove_${userId}` }
+            ],
+            user.isAdmin && !isMainAdmin ? [
+              { text: "❌ Убрать админа", callback_data: `admin_remove_admin_${userId}` }
+            ] : !user.isAdmin ? [
+              { text: "👑 Сделать админом", callback_data: `admin_make_admin_${userId}` }
+            ] : [],
+            [{ text: "⬅️ Назад", callback_data: "admin_panel" }]
+          ].filter(Boolean)
+        }
+      }
+    );
+  } catch (error) {
+    await ctx.reply("❌ Пользователь не найден.");
   }
+}
 
   async makeAdmin(ctx: Context, userId: number): Promise<void> {
     if (!await this.isAdmin(ctx.from!.id)) return;
