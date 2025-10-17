@@ -279,15 +279,6 @@ class BotInstance {
     // Проверяем, является ли пользователь админом для админских команд
     const isAdmin = await this.adminService.isAdmin(ctx.from.id);
     
-    // Обработка команды экспорта (пользователь ввел username) - ДОЛЖНО БЫТЬ ПЕРВЫМ!
-    if (text.startsWith('@') || /^[a-zA-Z0-9_]{5,32}$/.test(text)) {
-      await this.exportService.exportChatHistory(ctx, text);
-      return;
-    }
-
-    // Если не админ - выходим
-    if (!isAdmin) return;
-
     // ТЕПЕРЬ проверяем, ожидает ли админ ввода сообщения для рассылки
     const awaitingBroadcast = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingBroadcastMessage');
     
@@ -296,6 +287,9 @@ class BotInstance {
       await this.usersCollection.setAttribute(ctx.from.id, 'awaitingBroadcastMessage', 0);
       return;
     }
+
+    // Если не админ - выходим (не обрабатываем экспорт)
+    if (!isAdmin) return;
 
     // Обработка выдачи подписки (формат: "123456789 30" или "123456789 -1")
     const subMatch = text.match(/^(\d+)\s+(-?\d+)$/);
@@ -323,6 +317,25 @@ class BotInstance {
       }
       return;
     }
+
+    // Обработка назначения админа (формат: "admin 123456789")
+    const makeAdminMatch = text.match(/^admin\s+(\d+)$/);
+    if (makeAdminMatch) {
+      const targetUserId = parseInt(makeAdminMatch[1]);
+      await this.adminService.makeAdmin(ctx, targetUserId);
+      return;
+    }
+
+    // Обработка снятия админа (формат: "unadmin 123456789")
+    const removeAdminMatch = text.match(/^unadmin\s+(\d+)$/);
+    if (removeAdminMatch) {
+      const targetUserId = parseInt(removeAdminMatch[1]);
+      await this.adminService.removeAdmin(ctx, targetUserId);
+      return;
+    }
+
+    // Если текст не подошел ни под одну админскую команду - игнорируем
+    // НЕ ВЫЗЫВАЕМ exportService.exportChatHistory для админов!
 
   } catch (error) {
     console.error("Error in handleTextCommands:", error);

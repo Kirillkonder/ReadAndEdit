@@ -14,41 +14,42 @@ export class ExportService {
   private subscriptionService = new SubscriptionService();
 
   async startExportProcess(ctx: Context) {
-    if (!ctx.from) return;
+  if (!ctx.from) return;
 
-    // ПРОВЕРЯЕМ ПОДПИСКУ
-    const hasSubscription = await this.subscriptionService.checkAccess(ctx.from.id);
-    if (!hasSubscription) {
-      await ctx.reply(
-        "❌ <b>Для экспорта переписки требуется активная подписка</b>\n\n" +
-        "Приобретите подписку, чтобы получить доступ к этой функции.",
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "💎 Купить подписку", callback_data: "buy_subscription" }],
-              [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
-            ]
-          }
-        }
-      );
-      return;
-    }
-
+  // ПРОВЕРЯЕМ ПОДПИСКУ ПЕРЕД ТЕМ КАК ПРОСИТЬ USERNAME
+  const hasSubscription = await this.subscriptionService.checkAccess(ctx.from.id);
+  if (!hasSubscription) {
     await ctx.reply(
-      "💾 <b>Экспорт переписки</b>\n\n" +
-      "Введите username пользователя, переписку с которым хотите сохранить:\n\n" +
-      "<i>Пример: @username или просто username</i>",
+      "❌ <b>Для экспорта переписки требуется активная подписка</b>\n\n" +
+      "Приобретите подписку, чтобы получить доступ к этой функции.",
       {
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "⬅️ Отмена", callback_data: "main_menu" }]
+            [{ text: "💎 Купить подписку", callback_data: "buy_subscription" }],
+            [{ text: "🏠 Главное меню", callback_data: "main_menu" }]
           ]
         }
       }
     );
+    return;
   }
+
+  // Только если есть подписка - просим username
+  await ctx.reply(
+    "💾 <b>Экспорт переписки</b>\n\n" +
+    "Введите username пользователя, переписку с которым хотите сохранить:\n\n" +
+    "<i>Пример: @username или просто username</i>",
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⬅️ Отмена", callback_data: "main_menu" }]
+        ]
+      }
+    }
+  );
+}
 
   async exportChatHistory(ctx: Context, targetUsername: string) {
     if (!ctx.from) return;
