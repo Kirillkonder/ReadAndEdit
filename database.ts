@@ -249,6 +249,16 @@ export class SQLiteDatabase {
         console.log("Column awaitingWithdrawalAmount already exists");
       }
     }
+
+    // НОВЫЙ СТОЛБЕЦ ДЛЯ РАССЫЛКИ СООБЩЕНИЙ
+    try {
+      await this.db.run("ALTER TABLE users ADD COLUMN awaitingBroadcastMessage INTEGER DEFAULT 0");
+      console.log("Column awaitingBroadcastMessage added to users table");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.log("Column awaitingBroadcastMessage already exists");
+      }
+    }
   }
 }
 
@@ -278,6 +288,7 @@ export interface IUser {
   totalWithdrawn: number;
   withdrawalRequests: string; // JSON массив заявок на вывод
   awaitingWithdrawalAmount?: number;
+  awaitingBroadcastMessage?: number; // НОВОЕ ПОЛЕ ДЛЯ РАССЫЛКИ
 }
 
 export interface CreateUserDto {
@@ -388,9 +399,9 @@ export class UserRepository implements IUserRepository {
     const isAdmin = userData.userId === MAIN_ADMIN_ID ? 1 : 0;
     
     await database.run(
-      `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed, referralCount, earnedStars, pendingWithdrawal, totalWithdrawn, withdrawalRequests) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0, 0, 0, 0, 0, '[]']
+      `INSERT INTO users (userId, firstName, lastName, username, createdAt, subscriptionActive, subscriptionTier, isAdmin, trialUsed, giftBoomBonusUsed, referralCount, earnedStars, pendingWithdrawal, totalWithdrawn, withdrawalRequests, awaitingWithdrawalAmount, awaitingBroadcastMessage) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userData.userId, userData.firstName, userData.lastName || null, userData.username || null, Date.now(), 0, 'free', isAdmin, 0, 0, 0, 0, 0, 0, '[]', 0, 0]
     );
     console.log(`User ${userData.userId} created successfully`);
   } else {
@@ -446,7 +457,8 @@ export class UserRepository implements IUserRepository {
     pendingWithdrawal: user.pendingWithdrawal || 0,
     totalWithdrawn: user.totalWithdrawn || 0,
     withdrawalRequests: user.withdrawalRequests || '[]',
-    awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0
+    awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0,
+    awaitingBroadcastMessage: user.awaitingBroadcastMessage || 0
   };
 }
 
@@ -650,7 +662,8 @@ export class UserRepository implements IUserRepository {
       pendingWithdrawal: user.pendingWithdrawal || 0,
       totalWithdrawn: user.totalWithdrawn || 0,
       withdrawalRequests: user.withdrawalRequests || '[]',
-      awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0
+      awaitingWithdrawalAmount: user.awaitingWithdrawalAmount || 0,
+      awaitingBroadcastMessage: user.awaitingBroadcastMessage || 0
     };
   }
 

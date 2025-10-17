@@ -285,6 +285,8 @@ export async function handleCallbackQuery(ctx: Context) {
         await adminService.showMakeAdminMenu(ctx);
       } else if (data === 'admin_remove_admin_menu') {
         await adminService.showRemoveAdminMenu(ctx);
+      } else if (data === 'admin_broadcast_menu') {
+        await adminService.showBroadcastMenu(ctx);
       } else if (data.startsWith('admin_give_')) {
         const parts = data.split('_');
         const days = parseInt(parts[2]);

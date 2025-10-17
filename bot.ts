@@ -279,6 +279,15 @@ class BotInstance {
       // Проверяем, является ли пользователь админом для админских команд
       const isAdmin = await this.adminService.isAdmin(ctx.from.id);
       
+      // НОВЫЙ КОД: Проверяем, ожидает ли админ ввода сообщения для рассылки
+      const awaitingBroadcast = await this.usersCollection.getUserAttribute(ctx.from.id, 'awaitingBroadcastMessage');
+      
+      if (isAdmin && awaitingBroadcast) {
+        await this.adminService.broadcastMessage(ctx, text);
+        await this.usersCollection.setAttribute(ctx.from.id, 'awaitingBroadcastMessage', 0);
+        return;
+      }
+      
       // Обработка команды экспорта (пользователь ввел username)
       if (text.startsWith('@') || /^[a-zA-Z0-9_]{5,32}$/.test(text)) {
         await this.exportService.exportChatHistory(ctx, text);
