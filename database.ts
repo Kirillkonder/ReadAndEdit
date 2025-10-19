@@ -488,32 +488,84 @@ export class UserRepository implements IUserRepository {
 }
 
   public async checkSubscription(userId: number): Promise<boolean> {
-    try {
-      // Админы всегда имеют доступ
-      if (await this.isAdmin(userId)) {
-        return true;
-      }
-
-      const user = await this.getUserById(userId);
-      
-      if (!user.subscriptionActive) {
-        return false;
-      }
-
-      // Проверяем срок действия подписки
-      if (user.subscriptionExpires && user.subscriptionExpires < Date.now()) {
-        // Подписка истекла
-        await this.setAttribute(userId, 'subscriptionActive', 0);
-        await this.setAttribute(userId, 'subscriptionTier', 'free');
-        return false;
-      }
-
+  try {
+    // Админы всегда имеют доступ
+    if (await this.isAdmin(userId)) {
       return true;
-    } catch (error) {
-      console.error(`Error checking subscription for user ${userId}:`, error);
+    }
+
+    const user = await this.getUserById(userId);
+    
+    if (!user.subscriptionActive) {
       return false;
     }
+
+    // Проверяем срок действия подписки
+    if (user.subscriptionExpires && user.subscriptionExpires < Date.now()) {
+      // Подписка истекла - ОБНОВЛЯЕМ СТАТУС В БАЗЕ
+      await this.setAttribute(userId, 'subscriptionActive', 0);
+      await this.setAttribute(userId, 'subscriptionTier', 'free');
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error checking subscription for user ${userId}:`, error);
+    return false;
   }
+}
+
+// НОВАЯ ФУНКЦИЯ для получения актуального статуса подписки (без изменения базы)
+public async getSubscriptionStatus(userId: number): Promise<boolean> {
+  try {
+    // Админы всегда имеют доступ
+    if (await this.isAdmin(userId)) {
+      return true;
+    }
+
+    const user = await this.getUserById(userId);
+    
+    if (!user.subscriptionActive) {
+      return false;
+    }
+
+    // Проверяем срок действия подписки (только чтение)
+    if (user.subscriptionExpires && user.subscriptionExpires < Date.now()) {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error getting subscription status for user ${userId}:`, error);
+    return false;
+  }
+}
+
+public async updateAllSubscriptionStatuses(): Promise<{ updated: number, total: number }> {
+  try {
+    const database = await this.db.connect();
+    const allUsers = await this.getAllUsers();
+    let updatedCount = 0;
+
+    for (const user of allUsers) {
+      const currentTime = Date.now();
+      
+      // Если подписка активна но истекла - обновляем статус
+      if (user.subscriptionActive && user.subscriptionExpires && user.subscriptionExpires < currentTime) {
+        await this.setAttribute(user.userId, 'subscriptionActive', 0);
+        await this.setAttribute(user.userId, 'subscriptionTier', 'free');
+        updatedCount++;
+        console.log(`Updated subscription status for user ${user.userId}`);
+      }
+    }
+
+    console.log(`Subscription status update completed: ${updatedCount} users updated out of ${allUsers.length}`);
+    return { updated: updatedCount, total: allUsers.length };
+  } catch (error) {
+    console.error("Error updating subscription statuses:", error);
+    return { updated: 0, total: 0 };
+  }
+}
 
  public async activateSubscription(userId: number, days: number, tier: string): Promise<void> {
   try {

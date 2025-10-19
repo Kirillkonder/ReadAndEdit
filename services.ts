@@ -64,45 +64,56 @@ export class AdminService {
   }
 
   async showAdminPanel(ctx: Context): Promise<void> {
-    if (!await this.isAdmin(ctx.from!.id)) {
-      await ctx.reply("❌ У вас нет доступа к админ-панели.");
-      return;
-    }
-
-    const totalUsers = await this.usersCollection.getAllUsers();
-    const activeSubscriptions = totalUsers.filter(user => user.subscriptionActive).length;
-    const admins = await this.usersCollection.getAllAdmins();
-
-    await ctx.reply(
-      dedent`
-        👑 <b>Админ-панель</b>
-        
-        📊 <b>Статистика:</b>
-        • Всего пользователей: ${totalUsers.length}
-        • Активных подписок: ${activeSubscriptions}
-        • Администраторов: ${admins.length}
-        
-        🛠️ <b>Доступные действия:</b>
-      `,
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📋 Список пользователей", callback_data: "admin_users" }],
-            [{ text: "👑 Список администраторов", callback_data: "admin_admins" }],
-            [{ text: "💎 Выдать подписку", callback_data: "admin_give_sub_menu" }],
-            [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
-            [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
-            [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
-            [{ text: "📢 Рассылка сообщений", callback_data: "admin_broadcast_menu" }],
-            [{ text: "💰 Заявки на вывод", callback_data: "admin_withdrawals" }],
-            [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
-            [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
-          ]
-        }
-      }
-    );
+  if (!await this.isAdmin(ctx.from!.id)) {
+    await ctx.reply("❌ У вас нет доступа к админ-панели.");
+    return;
   }
+
+  const totalUsers = await this.usersCollection.getAllUsers();
+  
+  // ИСПРАВЛЕНИЕ: используем новую функцию для получения актуального статуса
+  let activeSubscriptions = 0;
+  for (const user of totalUsers) {
+    const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
+    if (hasActiveSubscription) {
+      activeSubscriptions++;
+    }
+  }
+
+  const admins = await this.usersCollection.getAllAdmins();
+
+  await ctx.reply(
+    dedent`
+      👑 <b>Админ-панель</b>
+      
+      📊 <b>Статистика:</b>
+      • Всего пользователей: ${totalUsers.length}
+      • Активных подписок: ${activeSubscriptions}
+      • Администраторов: ${admins.length}
+      
+      🛠️ <b>Доступные действия:</b>
+    `,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Список пользователей", callback_data: "admin_users" }],
+          [{ text: "👑 Список администраторов", callback_data: "admin_admins" }],
+          [{ text: "💎 Выдать подписку", callback_data: "admin_give_sub_menu" }],
+          [{ text: "❌ Удалить подписку", callback_data: "admin_remove_sub_menu" }],
+          [{ text: "👤 Инфо о пользователе", callback_data: "admin_user_info_menu" }],
+          [{ text: "⚡ Управление админами", callback_data: "admin_manage_admins" }],
+          [{ text: "📢 Рассылка сообщений", callback_data: "admin_broadcast_menu" }],
+          [{ text: "💰 Заявки на вывод", callback_data: "admin_withdrawals" }],
+          [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
+          [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
+        ]
+      }
+    }
+  );
+}
+
+
 
   async showUsersList(ctx: Context): Promise<void> {
   if (!await this.isAdmin(ctx.from!.id)) return;
@@ -111,8 +122,10 @@ export class AdminService {
   
   let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
   
-  users.slice(0, 50).forEach((user, index) => {
-    const status = user.subscriptionActive ? "✅" : "❌";
+  users.slice(0, 50).forEach(async (user, index) => {
+    // ИСПРАВЛЕНИЕ: используем актуальный статус подписки
+    const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
+    const status = hasActiveSubscription ? "✅" : "❌";
     const adminStatus = user.isAdmin ? "👑" : "";
     
     // Экранируем специальные HTML символы в именах пользователей
@@ -153,6 +166,29 @@ export class AdminService {
       ]
     }
   });
+}
+
+
+async updateAllSubscriptionStatuses(ctx: Context): Promise<void> {
+  if (!await this.isAdmin(ctx.from!.id)) return;
+
+  try {
+    const result = await this.usersCollection.updateAllSubscriptionStatuses();
+    
+    await ctx.reply(
+      `✅ <b>Статусы подписок обновлены</b>\n\nОбновлено: ${result.updated} пользователей\nВсего: ${result.total} пользователей`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    await ctx.reply("❌ Ошибка при обновлении статусов подписок");
+  }
 }
 
   async showAdminsList(ctx: Context): Promise<void> {
@@ -437,7 +473,9 @@ export class AdminService {
 
   try {
     const user = await this.usersCollection.getUserById(userId);
-    const hasActiveSubscription = await this.usersCollection.checkSubscription(userId);
+    
+    // ИСПРАВЛЕНИЕ: используем актуальный статус подписки
+    const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(userId);
     
     let subscriptionInfo = "❌ Нет активной подписки";
     if (hasActiveSubscription && user.subscriptionExpires) {
