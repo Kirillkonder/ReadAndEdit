@@ -163,33 +163,57 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
       return;
     }
 
-    let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
-    
-    // ВЫВОДИМ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ БЕЗ ОГРАНИЧЕНИЙ
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
+    // Функция для отправки части пользователей
+    const sendUsersBatch = async (userBatch: any[], batchNumber: number, totalBatches: number) => {
+      let message = `👥 <b>Список пользователей</b> (часть ${batchNumber}/${totalBatches})\n\n`;
       
-      // Используем актуальный статус подписки
-      const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
-      const status = hasActiveSubscription ? "✅" : "❌";
-      const adminStatus = user.isAdmin ? "👑" : "";
+      for (let i = 0; i < userBatch.length; i++) {
+        const user = userBatch[i];
+        const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
+        const status = hasActiveSubscription ? "✅" : "❌";
+        const adminStatus = user.isAdmin ? "👑" : "";
+        
+        const username = user.username ? `@${user.username}` : "нет username";
+        const fullName = user.lastName 
+          ? `${user.firstName} ${user.lastName}` 
+          : user.firstName;
+        
+        const globalIndex = (batchNumber - 1) * 40 + i + 1;
+        message += `${globalIndex}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
+      }
       
-      const username = user.username ? `@${user.username}` : "нет username";
-      const fullName = user.lastName 
-        ? `${user.firstName} ${user.lastName}` 
-        : user.firstName;
-      
-      message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
-    }
-
-    await ctx.reply(message, { 
-      parse_mode: "HTML",
-      reply_markup: {
+      // Для последнего сообщения добавляем кнопку назад
+      const replyMarkup = batchNumber === totalBatches ? {
         inline_keyboard: [
           [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
         ]
+      } : undefined;
+      
+      await ctx.reply(message, { 
+        parse_mode: "HTML",
+        reply_markup: replyMarkup
+      });
+    };
+
+    // Разбиваем пользователей на группы по 40 человек
+    const batchSize = 40;
+    const totalBatches = Math.ceil(users.length / batchSize);
+    
+    console.log(`DEBUG: Sending ${users.length} users in ${totalBatches} batches`);
+    
+    // Отправляем каждую группу отдельным сообщением
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const startIndex = batchIndex * batchSize;
+      const endIndex = startIndex + batchSize;
+      const userBatch = users.slice(startIndex, endIndex);
+      
+      await sendUsersBatch(userBatch, batchIndex + 1, totalBatches);
+      
+      // Небольшая задержка между сообщениями чтобы не спамить
+      if (batchIndex < totalBatches - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-    });
+    }
     
   } catch (error) {
     console.error("Error in showUsersList:", error);
