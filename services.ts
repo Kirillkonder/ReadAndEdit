@@ -122,15 +122,42 @@ export class AdminService {
   
   let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
   
-  // ИСПРАВЛЕНИЕ: используем обычный for цикла для асинхронных операций
-  const displayedUsers = users.slice(0, 50);
+  // ДЕБАГ: проверим что возвращает getAllUsers()
+  console.log(`DEBUG: Total users from DB: ${users.length}`);
+  console.log(`DEBUG: First user:`, users[0]);
   
+  // Если пользователей нет
+  if (users.length === 0) {
+    message += "❌ Пользователей не найдено";
+    await ctx.reply(message, { 
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+    return;
+  }
+
+  // Ограничиваем количество отображаемых пользователей
+  const maxDisplay = 50;
+  const displayedUsers = users.slice(0, maxDisplay);
+  
+  console.log(`DEBUG: Displaying ${displayedUsers.length} users`);
+  
+  // Формируем список пользователей
   for (let i = 0; i < displayedUsers.length; i++) {
     const user = displayedUsers[i];
     
-    // ИСПРАВЛЕНИЕ: используем актуальный статус подписки
-    const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
-    const status = hasActiveSubscription ? "✅" : "❌";
+    // ДЕБАГ: информация о каждом пользователе
+    console.log(`DEBUG: User ${i}:`, {
+      id: user.userId,
+      firstName: user.firstName,
+      subscriptionActive: user.subscriptionActive
+    });
+    
+    const status = user.subscriptionActive ? "✅" : "❌";
     const adminStatus = user.isAdmin ? "👑" : "";
     
     // Экранируем специальные HTML символы в именах пользователей
@@ -159,10 +186,15 @@ export class AdminService {
     message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
   }
 
-  if (users.length > 50) {
-    message += `\n... и еще ${users.length - 50} пользователей`;
+  // Добавляем информацию о скрытых пользователях
+  if (users.length > maxDisplay) {
+    message += `\n... и еще ${users.length - maxDisplay} пользователей`;
   }
 
+  // ДЕБАГ: посмотрим на финальное сообщение
+  console.log(`DEBUG: Final message length: ${message.length}`);
+  console.log(`DEBUG: Message preview:`, message.substring(0, 200));
+  
   await ctx.reply(message, { 
     parse_mode: "HTML",
     reply_markup: {
