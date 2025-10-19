@@ -122,7 +122,12 @@ export class AdminService {
   
   let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
   
-  users.slice(0, 50).forEach(async (user, index) => {
+  // ИСПРАВЛЕНИЕ: используем обычный for цикла для асинхронных операций
+  const displayedUsers = users.slice(0, 50);
+  
+  for (let i = 0; i < displayedUsers.length; i++) {
+    const user = displayedUsers[i];
+    
     // ИСПРАВЛЕНИЕ: используем актуальный статус подписки
     const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
     const status = hasActiveSubscription ? "✅" : "❌";
@@ -151,8 +156,8 @@ export class AdminService {
       ? `${safeFirstName} ${safeLastName}` 
       : safeFirstName;
     
-    message += `${index + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
-  });
+    message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
+  }
 
   if (users.length > 50) {
     message += `\n... и еще ${users.length - 50} пользователей`;
