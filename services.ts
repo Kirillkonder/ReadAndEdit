@@ -149,13 +149,15 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
   try {
     const users = await this.usersCollection.getAllUsers();
     
+    console.log(`DEBUG: Got ${users.length} users from database`);
+    
     if (users.length === 0) {
       await ctx.reply("👥 <b>Список пользователей</b>\n\n❌ Пользователей не найдено");
       return;
     }
 
-    // Разбиваем на группы по 30 пользователей
-    const usersPerMessage = 30;
+    // ПРОСТАЯ ВЕРСИЯ БЕЗ ПРОВЕРКИ СТАТУСА - ТОЛЬКО ДАННЫЕ ИЗ БАЗЫ
+    const usersPerMessage = 40;
     const totalMessages = Math.ceil(users.length / usersPerMessage);
 
     for (let msgIndex = 0; msgIndex < totalMessages; msgIndex++) {
@@ -165,7 +167,7 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
       
       let message = `👥 <b>Список пользователей</b> `;
       if (totalMessages > 1) {
-        message += `(${msgIndex + 1}/${totalMessages})\n\n`;
+        message += `(часть ${msgIndex + 1} из ${totalMessages})\n\n`;
       } else {
         message += `(всего: ${users.length})\n\n`;
       }
@@ -173,6 +175,8 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
       for (let i = 0; i < batchUsers.length; i++) {
         const user = batchUsers[i];
         const globalIndex = start + i + 1;
+        
+        // ПРОСТО БЕРЕМ ДАННЫЕ ИЗ БАЗЫ БЕЗ ДОПОЛНИТЕЛЬНЫХ ПРОВЕРОК
         const status = user.subscriptionActive ? "✅" : "❌";
         const adminStatus = user.isAdmin ? "👑" : "";
         
@@ -184,21 +188,20 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
         message += `${globalIndex}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
       }
       
-      // Для последнего сообщения добавляем кнопку
-      const replyMarkup = (msgIndex === totalMessages - 1) ? {
-        inline_keyboard: [
-          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-        ]
-      } : undefined;
-      
-      await ctx.reply(message, { 
-        parse_mode: "HTML",
-        reply_markup: replyMarkup
-      });
-      
-      // Задержка между сообщениями
-      if (msgIndex < totalMessages - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+      // Только для последнего сообщения добавляем кнопку назад
+      if (msgIndex === totalMessages - 1) {
+        message += `\n📊 Всего пользователей: ${users.length}`;
+        
+        await ctx.reply(message, { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        });
+      } else {
+        await ctx.reply(message, { parse_mode: "HTML" });
       }
     }
     
