@@ -71,11 +71,17 @@ export class AdminService {
 
   const totalUsers = await this.usersCollection.getAllUsers();
   
-  // ИСПРАВЛЕНИЕ: используем новую функцию для получения актуального статуса
+  // ИСПРАВЛЕНИЕ: правильный подсчет активных подписок
   let activeSubscriptions = 0;
+  
   for (const user of totalUsers) {
-    const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
-    if (hasActiveSubscription) {
+    // ДЕБАГ: логируем статус каждого пользователя
+    const actualStatus = await this.usersCollection.getSubscriptionStatus(user.userId);
+    const dbStatus = user.subscriptionActive;
+    
+    console.log(`DEBUG: User ${user.userId} - DB: ${dbStatus}, Actual: ${actualStatus}, Expires: ${user.subscriptionExpires ? new Date(user.subscriptionExpires).toLocaleString() : 'null'}`);
+    
+    if (actualStatus) {
       activeSubscriptions++;
     }
   }
@@ -106,6 +112,7 @@ export class AdminService {
           [{ text: "📢 Рассылка сообщений", callback_data: "admin_broadcast_menu" }],
           [{ text: "💰 Заявки на вывод", callback_data: "admin_withdrawals" }],
           [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
+          [{ text: "🔄 Исправить статусы подписок", callback_data: "admin_fix_subscriptions" }], // НОВАЯ КНОПКА
           [{ text: "⬅️ Главное меню", callback_data: "main_menu" }]
         ]
       }
@@ -113,7 +120,28 @@ export class AdminService {
   );
 }
 
+async fixSubscriptionStatuses(ctx: Context): Promise<void> {
+  if (!await this.isAdmin(ctx.from!.id)) return;
 
+  try {
+    const result = await this.usersCollection.fixExpiredSubscriptions();
+    
+    await ctx.reply(
+      `🔧 <b>Статусы подписок исправлены</b>\n\nИсправлено: ${result.fixed} пользователей\nВсего: ${result.total} пользователей\n\nТеперь статистика должна отображаться корректно.`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔄 Обновить статистику", callback_data: "admin_stats" }],
+            [{ text: "⬅️ В админ-панель", callback_data: "admin_panel" }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    await ctx.reply("❌ Ошибка при исправлении статусов подписок");
+  }
+}
 
   async showUsersList(ctx: Context): Promise<void> {
   if (!await this.isAdmin(ctx.from!.id)) return;

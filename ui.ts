@@ -187,6 +187,12 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
+    if (data === 'admin_fix_subscriptions') {
+    await adminService.fixSubscriptionStatuses(ctx);
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
     if (data === 'buy_subscription') {
       await buySubscription(ctx);
       await ctx.answerCallbackQuery();

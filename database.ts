@@ -516,6 +516,7 @@ export class UserRepository implements IUserRepository {
 }
 
 // НОВАЯ ФУНКЦИЯ для получения актуального статуса подписки (без изменения базы)
+// НОВАЯ ФУНКЦИЯ для получения актуального статуса подписки (с проверкой срока)
 public async getSubscriptionStatus(userId: number): Promise<boolean> {
   try {
     // Админы всегда имеют доступ
@@ -525,12 +526,19 @@ public async getSubscriptionStatus(userId: number): Promise<boolean> {
 
     const user = await this.getUserById(userId);
     
+    // Если подписка не активна в базе
     if (!user.subscriptionActive) {
       return false;
     }
 
-    // Проверяем срок действия подписки (только чтение)
+    // ВАЖНО: проверяем срок действия подписки
     if (user.subscriptionExpires && user.subscriptionExpires < Date.now()) {
+      // Подписка истекла - возвращаем false
+      return false;
+    }
+
+    // Если subscriptionExpires не установлен, считаем подписку неактивной
+    if (!user.subscriptionExpires) {
       return false;
     }
 
@@ -538,6 +546,40 @@ public async getSubscriptionStatus(userId: number): Promise<boolean> {
   } catch (error) {
     console.error(`Error getting subscription status for user ${userId}:`, error);
     return false;
+  }
+}
+
+public async fixExpiredSubscriptions(): Promise<{ fixed: number, total: number }> {
+  try {
+    const database = await this.db.connect();
+    const allUsers = await this.getAllUsers();
+    let fixedCount = 0;
+
+    const currentTime = Date.now();
+    
+    for (const user of allUsers) {
+      // Если подписка активна в базе но истекла по времени - исправляем
+      if (user.subscriptionActive && user.subscriptionExpires && user.subscriptionExpires < currentTime) {
+        await this.setAttribute(user.userId, 'subscriptionActive', 0);
+        await this.setAttribute(user.userId, 'subscriptionTier', 'free');
+        fixedCount++;
+        console.log(`Fixed subscription for user ${user.userId} - expired on ${new Date(user.subscriptionExpires).toLocaleString()}`);
+      }
+      
+      // Если подписка активна но нет даты окончания - деактивируем
+      if (user.subscriptionActive && !user.subscriptionExpires) {
+        await this.setAttribute(user.userId, 'subscriptionActive', 0);
+        await this.setAttribute(user.userId, 'subscriptionTier', 'free');
+        fixedCount++;
+        console.log(`Fixed subscription for user ${user.userId} - no expiration date`);
+      }
+    }
+
+    console.log(`Subscription fix completed: ${fixedCount} users fixed out of ${allUsers.length}`);
+    return { fixed: fixedCount, total: allUsers.length };
+  } catch (error) {
+    console.error("Error fixing subscription statuses:", error);
+    return { fixed: 0, total: 0 };
   }
 }
 
