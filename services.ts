@@ -146,91 +146,91 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
   async showUsersList(ctx: Context): Promise<void> {
   if (!await this.isAdmin(ctx.from!.id)) return;
 
-  const users = await this.usersCollection.getAllUsers();
-  
-  let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
-  
-  // ДЕБАГ: проверим что возвращает getAllUsers()
-  console.log(`DEBUG: Total users from DB: ${users.length}`);
-  console.log(`DEBUG: First user:`, users[0]);
-  
-  // Если пользователей нет
-  if (users.length === 0) {
-    message += "❌ Пользователей не найдено";
-    await ctx.reply(message, { 
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-        ]
-      }
-    });
-    return;
-  }
-
-  // Ограничиваем количество отображаемых пользователей
-  const maxDisplay = 50;
-  const displayedUsers = users.slice(0, maxDisplay);
-  
-  console.log(`DEBUG: Displaying ${displayedUsers.length} users`);
-  
-  // Формируем список пользователей
-  for (let i = 0; i < displayedUsers.length; i++) {
-    const user = displayedUsers[i];
+  try {
+    const users = await this.usersCollection.getAllUsers();
     
-    // ДЕБАГ: информация о каждом пользователе
-    console.log(`DEBUG: User ${i}:`, {
-      id: user.userId,
-      firstName: user.firstName,
-      subscriptionActive: user.subscriptionActive
-    });
-    
-    const status = user.subscriptionActive ? "✅" : "❌";
-    const adminStatus = user.isAdmin ? "👑" : "";
-    
-    // Экранируем специальные HTML символы в именах пользователей
-    const safeFirstName = user.firstName
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-    
-    const safeLastName = user.lastName 
-      ? user.lastName
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#039;')
-      : '';
-    
-    const username = user.username ? `@${user.username}` : "нет username";
-    
-    const fullName = safeLastName 
-      ? `${safeFirstName} ${safeLastName}` 
-      : safeFirstName;
-    
-    message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
-  }
-
-  // Добавляем информацию о скрытых пользователях
-  if (users.length > maxDisplay) {
-    message += `\n... и еще ${users.length - maxDisplay} пользователей`;
-  }
-
-  // ДЕБАГ: посмотрим на финальное сообщение
-  console.log(`DEBUG: Final message length: ${message.length}`);
-  console.log(`DEBUG: Message preview:`, message.substring(0, 200));
-  
-  await ctx.reply(message, { 
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-      ]
+    if (users.length === 0) {
+      await ctx.reply("👥 <b>Список пользователей</b>\n\n❌ Пользователей не найдено", {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+      return;
     }
-  });
+
+    // Проверяем общее количество символов
+    let fullMessage = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
+    
+    // Сначала формируем весь список в памяти
+    const userLines = [];
+    
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      const hasActiveSubscription = await this.usersCollection.getSubscriptionStatus(user.userId);
+      const status = hasActiveSubscription ? "✅" : "❌";
+      const adminStatus = user.isAdmin ? "👑" : "";
+      
+      const username = user.username ? `@${user.username}` : "нет username";
+      const fullName = user.lastName 
+        ? `${user.firstName} ${user.lastName}` 
+        : user.firstName;
+      
+      const userLine = `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}`;
+      userLines.push(userLine);
+    }
+    
+    // Если общее сообщение слишком длинное, разбиваем на части
+    const maxMessageLength = 4000; // Оставляем запас для HTML тегов
+    
+    if (fullMessage.length + userLines.join('\n').length <= maxMessageLength) {
+      // Всё помещается в одно сообщение
+      fullMessage += userLines.join('\n');
+      await ctx.reply(fullMessage, { 
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+    } else {
+      // Разбиваем на несколько сообщений
+      let currentMessage = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
+      let messageCount = 1;
+      
+      for (let i = 0; i < userLines.length; i++) {
+        const userLine = userLines[i];
+        
+        // Если добавление следующей строки превысит лимит, отправляем текущее сообщение
+        if (currentMessage.length + userLine.length + 1 > maxMessageLength) {
+          await ctx.reply(currentMessage, { parse_mode: "HTML" });
+          currentMessage = `👥 <b>Список пользователей</b> (часть ${messageCount + 1})\n\n`;
+          messageCount++;
+        }
+        
+        currentMessage += userLine + '\n';
+      }
+      
+      // Отправляем последнее сообщение с кнопкой назад
+      if (currentMessage.length > 0) {
+        await ctx.reply(currentMessage, { 
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+            ]
+          }
+        });
+      }
+    }
+    
+  } catch (error) {
+    console.error("Error in showUsersList:", error);
+    await ctx.reply("❌ Ошибка при загрузке списка пользователей");
+  }
 }
 
 
