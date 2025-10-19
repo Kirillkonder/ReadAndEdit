@@ -146,69 +146,91 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
   async showUsersList(ctx: Context): Promise<void> {
   if (!await this.isAdmin(ctx.from!.id)) return;
 
-  try {
-    const users = await this.usersCollection.getAllUsers();
-    
-    console.log(`DEBUG: Got ${users.length} users from database`);
-    
-    if (users.length === 0) {
-      await ctx.reply("👥 <b>Список пользователей</b>\n\n❌ Пользователей не найдено");
-      return;
-    }
-
-    // ПРОСТАЯ ВЕРСИЯ БЕЗ ПРОВЕРКИ СТАТУСА - ТОЛЬКО ДАННЫЕ ИЗ БАЗЫ
-    const usersPerMessage = 40;
-    const totalMessages = Math.ceil(users.length / usersPerMessage);
-
-    for (let msgIndex = 0; msgIndex < totalMessages; msgIndex++) {
-      const start = msgIndex * usersPerMessage;
-      const end = start + usersPerMessage;
-      const batchUsers = users.slice(start, end);
-      
-      let message = `👥 <b>Список пользователей</b> `;
-      if (totalMessages > 1) {
-        message += `(часть ${msgIndex + 1} из ${totalMessages})\n\n`;
-      } else {
-        message += `(всего: ${users.length})\n\n`;
+  const users = await this.usersCollection.getAllUsers();
+  
+  let message = `👥 <b>Список пользователей</b> (всего: ${users.length})\n\n`;
+  
+  // ДЕБАГ: проверим что возвращает getAllUsers()
+  console.log(`DEBUG: Total users from DB: ${users.length}`);
+  console.log(`DEBUG: First user:`, users[0]);
+  
+  // Если пользователей нет
+  if (users.length === 0) {
+    message += "❌ Пользователей не найдено";
+    await ctx.reply(message, { 
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+        ]
       }
-      
-      for (let i = 0; i < batchUsers.length; i++) {
-        const user = batchUsers[i];
-        const globalIndex = start + i + 1;
-        
-        // ПРОСТО БЕРЕМ ДАННЫЕ ИЗ БАЗЫ БЕЗ ДОПОЛНИТЕЛЬНЫХ ПРОВЕРОК
-        const status = user.subscriptionActive ? "✅" : "❌";
-        const adminStatus = user.isAdmin ? "👑" : "";
-        
-        const username = user.username ? `@${user.username}` : "нет username";
-        const fullName = user.lastName 
-          ? `${user.firstName} ${user.lastName}` 
-          : user.firstName;
-        
-        message += `${globalIndex}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
-      }
-      
-      // Только для последнего сообщения добавляем кнопку назад
-      if (msgIndex === totalMessages - 1) {
-        message += `\n📊 Всего пользователей: ${users.length}`;
-        
-        await ctx.reply(message, { 
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
-            ]
-          }
-        });
-      } else {
-        await ctx.reply(message, { parse_mode: "HTML" });
-      }
-    }
-    
-  } catch (error) {
-    console.error("Error in showUsersList:", error);
-    await ctx.reply("❌ Ошибка при загрузке списка пользователей");
+    });
+    return;
   }
+
+  // Ограничиваем количество отображаемых пользователей
+  const maxDisplay = 50;
+  const displayedUsers = users.slice(0, maxDisplay);
+  
+  console.log(`DEBUG: Displaying ${displayedUsers.length} users`);
+  
+  // Формируем список пользователей
+  for (let i = 0; i < displayedUsers.length; i++) {
+    const user = displayedUsers[i];
+    
+    // ДЕБАГ: информация о каждом пользователе
+    console.log(`DEBUG: User ${i}:`, {
+      id: user.userId,
+      firstName: user.firstName,
+      subscriptionActive: user.subscriptionActive
+    });
+    
+    const status = user.subscriptionActive ? "✅" : "❌";
+    const adminStatus = user.isAdmin ? "👑" : "";
+    
+    // Экранируем специальные HTML символы в именах пользователей
+    const safeFirstName = user.firstName
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    
+    const safeLastName = user.lastName 
+      ? user.lastName
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;')
+      : '';
+    
+    const username = user.username ? `@${user.username}` : "нет username";
+    
+    const fullName = safeLastName 
+      ? `${safeFirstName} ${safeLastName}` 
+      : safeFirstName;
+    
+    message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
+  }
+
+  // Добавляем информацию о скрытых пользователях
+  if (users.length > maxDisplay) {
+    message += `\n... и еще ${users.length - maxDisplay} пользователей`;
+  }
+
+  // ДЕБАГ: посмотрим на финальное сообщение
+  console.log(`DEBUG: Final message length: ${message.length}`);
+  console.log(`DEBUG: Message preview:`, message.substring(0, 200));
+  
+  await ctx.reply(message, { 
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "⬅️ Назад в админ-панель", callback_data: "admin_panel" }]
+      ]
+    }
+  });
 }
 
 
