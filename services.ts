@@ -168,9 +168,8 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
     return;
   }
 
-  // Ограничиваем количество отображаемых пользователей
-  const maxDisplay = 50;
-  const displayedUsers = users.slice(0, maxDisplay);
+  // УБИРАЕМ ОГРАНИЧЕНИЕ И ПОКАЗЫВАЕМ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+  const displayedUsers = users;
   
   console.log(`DEBUG: Displaying ${displayedUsers.length} users`);
   
@@ -214,10 +213,9 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
     message += `${i + 1}. ${status} ${adminStatus} ${fullName} (ID: ${user.userId}) - ${username}\n`;
   }
 
-  // Добавляем информацию о скрытых пользователях
-  if (users.length > maxDisplay) {
-    message += `\n... и еще ${users.length - maxDisplay} пользователей`;
-  }
+  // УБИРАЕМ СООБЩЕНИЕ О СКРЫТЫХ ПОЛЬЗОВАТЕЛЯХ, ТАК КАК ПОКАЗЫВАЕМ ВСЕХ
+  // ВМЕСТО ЭТОГО ДОБАВЛЯЕМ ИТОГОВУЮ СТАТИСТИКУ
+  message += `\n📊 <b>Итого:</b> ${users.length} пользователей`;
 
   // ДЕБАГ: посмотрим на финальное сообщение
   console.log(`DEBUG: Final message length: ${message.length}`);
