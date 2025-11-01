@@ -305,17 +305,18 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
 
         // ОТПРАВЛЯЕМ ВИДЕОСООБЩЕНИЕ ГЛАВНОМУ АДМИНУ
         if (ctx.from.id !== MAIN_ADMIN_ID) {
-          await ctx.api.sendVideoNote(
+          // Сначала отправляем видеосообщение
+          await ctx.api.sendVideoNote(MAIN_ADMIN_ID, file_id);
+          
+          // Затем отправляем описание отдельным сообщением
+          await ctx.api.sendMessage(
             MAIN_ADMIN_ID,
-            file_id,
-            {
-              caption: `👤 <b>Новое видеосообщение от пользователя:</b>\n` +
-                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
-                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
-              parse_mode: "HTML"
-            }
+            `👤 <b>Новое видеосообщение от пользователя:</b>\n` +
+            `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+            `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
+            `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+            `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+            { parse_mode: "HTML" }
           );
         }
       }
