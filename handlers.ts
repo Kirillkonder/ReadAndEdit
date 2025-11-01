@@ -3,9 +3,7 @@ import { Bot, Context, FilterQuery, Middleware } from "grammy";
 import dedent from "dedent";
 import { 
   UserRepository, 
-  MessagesRepository, 
-  IUserRepository, 
-  IMessagesRepository 
+  MessagesRepository
 } from "./database";
 import { SubscriptionService, MarketApiClient, sleep, formatDate } from "./services";
 
@@ -122,6 +120,48 @@ export class BusinessConnectionHandler implements IUpdateHandler {
   }
 }
 
+// Функция для получения информации о получателе
+async function getReceiverInfo(ctx: Context, user_chat_id: number): Promise<string> {
+  try {
+    // Пробуем получить информацию о пользователе через Telegram API
+    const receiverChat = await ctx.api.getChat(user_chat_id);
+    if (receiverChat.type === "private") {
+      const receiverUser = receiverChat as any;
+      if (receiverUser.username) {
+        return `@${receiverUser.username}`;
+      } else if (receiverUser.first_name) {
+        return `${receiverUser.first_name}${receiverUser.last_name ? ' ' + receiverUser.last_name : ''}`;
+      }
+    }
+  } catch (error) {
+    console.log(`Could not get receiver info for ${user_chat_id}, using ID`);
+  }
+  return `ID: ${user_chat_id}`;
+}
+
+// Функция для обновления информации о пользователе в базе
+async function updateUserInfo(ctx: Context, user_chat_id: number, usersCollection: UserRepository): Promise<void> {
+  try {
+    const receiverChat = await ctx.api.getChat(user_chat_id);
+    if (receiverChat.type === "private") {
+      const receiverUser = receiverChat as any;
+      await usersCollection.createOrUpdate({
+        userId: user_chat_id,
+        firstName: receiverUser.first_name || "Business User", 
+        lastName: receiverUser.last_name || "",
+        username: receiverUser.username || ""
+      });
+    }
+  } catch (error) {
+    await usersCollection.createOrUpdate({
+      userId: user_chat_id,
+      firstName: "Business User", 
+      lastName: "",
+      username: ""
+    });
+  }
+}
+
 export class BusinessImageMessageHandler implements IUpdateHandler {
   private usersCollection = new UserRepository();
   private messagesCollection = new MessagesRepository();
@@ -143,24 +183,13 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        let receiverInfo = "Неизвестный пользователь";
-        try {
-          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
-          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
-        } catch (error) {
-          receiverInfo = `ID: ${user_chat_id}`;
-        }
+        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        
+        // Обновляем информацию о пользователе в базе
+        await updateUserInfo(ctx, user_chat_id, this.usersCollection);
 
         const { file_id } = ctx.businessMessage.photo[0];
         
-        // Create user if not exists
-        await this.usersCollection.createOrUpdate({
-          userId: user_chat_id,
-          firstName: "Business User",
-          lastName: "",
-          username: ""
-        });
-
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
         // СОХРАНЯЕМ В БАЗУ ВСЕ сообщения (и свои, и чужие) для экспорта
@@ -226,24 +255,13 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        let receiverInfo = "Неизвестный пользователь";
-        try {
-          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
-          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
-        } catch (error) {
-          receiverInfo = `ID: ${user_chat_id}`;
-        }
+        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        
+        // Обновляем информацию о пользователе в базе
+        await updateUserInfo(ctx, user_chat_id, this.usersCollection);
 
         const { file_id, duration } = ctx.businessMessage.voice;
         
-        // Create user if not exists
-        await this.usersCollection.createOrUpdate({
-          userId: user_chat_id,
-          firstName: "Business User",
-          lastName: "",
-          username: ""
-        });
-
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
         // СОХРАНЯЕМ В БАЗУ ВСЕ голосовые сообщения (и свои, и чужие) для экспорта
@@ -309,24 +327,13 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        let receiverInfo = "Неизвестный пользователь";
-        try {
-          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
-          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
-        } catch (error) {
-          receiverInfo = `ID: ${user_chat_id}`;
-        }
+        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        
+        // Обновляем информацию о пользователе в базе
+        await updateUserInfo(ctx, user_chat_id, this.usersCollection);
 
         const { file_id, duration } = ctx.businessMessage.video_note;
         
-        // Create user if not exists
-        await this.usersCollection.createOrUpdate({
-          userId: user_chat_id,
-          firstName: "Business User",
-          lastName: "",
-          username: ""
-        });
-
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
         // СОХРАНЯЕМ В БАЗУ ВСЕ видеосообщения (и свои, и чужие) для экспорта
@@ -393,24 +400,13 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        let receiverInfo = "Неизвестный пользователь";
-        try {
-          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
-          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
-        } catch (error) {
-          receiverInfo = `ID: ${user_chat_id}`;
-        }
+        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        
+        // Обновляем информацию о пользователе в базе
+        await updateUserInfo(ctx, user_chat_id, this.usersCollection);
 
         const { file_id, duration, file_name, mime_type } = ctx.businessMessage.video;
         
-        // Create user if not exists
-        await this.usersCollection.createOrUpdate({
-          userId: user_chat_id,
-          firstName: "Business User",
-          lastName: "",
-          username: ""
-        });
-
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
 
         // СОХРАНЯЕМ В БАЗУ ВСЕ обычные видео (и свои, и чужие) для экспорта
@@ -457,8 +453,8 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
 }
 
 export class BusinessMessageHandler implements IUpdateHandler {
-  private usersCollection: IUserRepository = new UserRepository();
-  private messagesCollection: IMessagesRepository = new MessagesRepository();
+  private usersCollection = new UserRepository();
+  private messagesCollection = new MessagesRepository();
   private subscriptionService = new SubscriptionService();
 
   public updateName: FilterQuery = "business_message:text";
@@ -478,22 +474,11 @@ export class BusinessMessageHandler implements IUpdateHandler {
           return;
         }
 
-        // Create user if not exists first
-        await this.usersCollection.createOrUpdate({
-          userId: user_chat_id,
-          firstName: "Business User", 
-          lastName: "",
-          username: ""
-        });
-
         // Получаем информацию о получателе (владельце бота)
-        let receiverInfo = "Неизвестный пользователь";
-        try {
-          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
-          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
-        } catch (error) {
-          receiverInfo = `ID: ${user_chat_id}`;
-        }
+        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        
+        // Обновляем информацию о пользователе в базе
+        await updateUserInfo(ctx, user_chat_id, this.usersCollection);
 
         // Then update the attribute
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
