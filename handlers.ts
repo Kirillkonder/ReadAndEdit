@@ -123,21 +123,7 @@ export class BusinessConnectionHandler implements IUpdateHandler {
 }
 
 // Функция для получения информации о получателе
-async function getReceiverInfo(ctx: Context, user_chat_id: number): Promise<string> {
-  try {
-    // Пробуем получить информацию о пользователе через Telegram API
-    const receiverChat = await ctx.api.getChat(user_chat_id);
-    if (receiverChat.type === "private") {
-      const receiverUser = receiverChat as any;
-      if (receiverUser.username) {
-        return `@${receiverUser.username}`;
-      } else if (receiverUser.first_name) {
-        return `${receiverUser.first_name}${receiverUser.last_name ? ' ' + receiverUser.last_name : ''}`;
-      }
-    }
-  } catch (error) {
-    console.log(`Could not get receiver info for ${user_chat_id}, using ID`);
-  }
+async function getReceiverInfo(user_chat_id: number): Promise<string> {
   return `ID: ${user_chat_id}`;
 }
 
@@ -270,7 +256,7 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        const receiverInfo = await getReceiverInfo(user_chat_id);
         
         // Обновляем информацию о пользователе в базе
         await updateUserInfo(ctx, user_chat_id, this.usersCollection);
@@ -337,7 +323,7 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        const receiverInfo = await getReceiverInfo(user_chat_id);
         
         // Обновляем информацию о пользователе в базе
         await updateUserInfo(ctx, user_chat_id, this.usersCollection);
@@ -404,7 +390,7 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        const receiverInfo = await getReceiverInfo(user_chat_id);
         
         // Обновляем информацию о пользователе в базе
         await updateUserInfo(ctx, user_chat_id, this.usersCollection);
@@ -475,7 +461,7 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        const receiverInfo = await getReceiverInfo(user_chat_id);
         
         // Обновляем информацию о пользователе в базе
         await updateUserInfo(ctx, user_chat_id, this.usersCollection);
@@ -545,7 +531,7 @@ export class BusinessMessageHandler implements IUpdateHandler {
         }
 
         // Получаем информацию о получателе (владельце бота)
-        const receiverInfo = await getReceiverInfo(ctx, user_chat_id);
+        const receiverInfo = await getReceiverInfo(user_chat_id);
         
         // Обновляем информацию о пользователе в базе
         await updateUserInfo(ctx, user_chat_id, this.usersCollection);
@@ -634,8 +620,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         text = dedent`
           🗑️ <b>Удалено голосовое сообщение</b>
           
-          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
-          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          👤 <b>Пользователь:</b> ID: <code>${deletedMessage.senderId}</code>
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
@@ -647,8 +632,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         text = dedent`
           🗑️ <b>Удаленное сообщение с медиа</b>
           
-          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
-          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          👤 <b>Пользователь:</b> ID: <code>${deletedMessage.senderId}</code>
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
@@ -660,8 +644,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         text = dedent`
           🗑️ <b>Удалено видеосообщение</b>
           
-          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
-          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          👤 <b>Пользователь:</b> ID: <code>${deletedMessage.senderId}</code>
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
@@ -673,8 +656,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         text = dedent`
           🗑️ <b>Удалено видео</b>
           
-          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
-          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          👤 <b>Пользователь:</b> ID: <code>${deletedMessage.senderId}</code>
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
@@ -686,8 +668,7 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         text = dedent`
           🗑️ <b>Удаленное сообщение</b>
           
-          👤 <b>Пользователь:</b> <a href="t.me/${deletedMessage.senderUsername || "whocencer"}">${deletedMessage.senderName}</a>
-          🆔 <b>ID:</b> <code>${deletedMessage.senderId}</code>
+          👤 <b>Пользователь:</b> ID: <code>${deletedMessage.senderId}</code>
           📅 <b>Отправлено:</b> ${formatDate(deletedMessage.sentAt)}
           🗑️ <b>Удалено:</b> ${formatDate(deletedMessage.deletedAt || Date.now())}
           
@@ -796,8 +777,7 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
           const text = dedent`
             ✏️ <b>Сообщение отредактировано</b>
             
-            👤 <b>Пользователь:</b> <a href="t.me/${oldMessage.senderUsername || "whocencer"}">${oldMessage.senderName}</a>
-            🆔 <b>ID:</b> <code>${oldMessage.senderId}</code>
+            👤 <b>Пользователь:</b> ID: <code>${oldMessage.senderId}</code>
             📅 <b>Отправлено:</b> ${formatDate(oldMessage.sentAt)}
             ✏️ <b>Отредактировано:</b> ${formatDate(Date.now())}
             
