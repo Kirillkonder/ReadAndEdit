@@ -229,7 +229,7 @@ async fixSubscriptionStatuses(ctx: Context): Promise<void> {
       ]
     }
   });
-} 
+}
 
 
 async updateAllSubscriptionStatuses(ctx: Context): Promise<void> {
