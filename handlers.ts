@@ -396,6 +396,12 @@ export class DeletedBusinessMessageHandler implements IUpdateHandler {
         return;
       }
 
+      // ВАЖНАЯ ПРОВЕРКА БЕЗОПАСНОСТИ: сообщение должно принадлежать текущему пользователю
+      if (deletedMessage.userId !== userChatId) {
+        console.log(`🚫 SECURITY: User ${userChatId} trying to access message ${messageId} that belongs to user ${deletedMessage.userId}`);
+        return;
+      }
+
       // ОБНОВЛЯЕМ В БАЗЕ ВСЕ сообщения (помечаем как удаленные)
       await this.messagesCollection.setAttribute(messageId, "isDeleted", true);
       await this.messagesCollection.setAttribute(messageId, "deletedAt", Date.now());
@@ -551,10 +557,19 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
         const oldMessage = await this.messagesCollection.getById(message_id);
       
         if (newMessageText && oldMessage) {
+          // ВАЖНАЯ ПРОВЕРКА БЕЗОПАСНОСТИ: сообщение должно принадлежать текущему пользователю
+          if (oldMessage.userId !== receiverId) {
+            console.log(`🚫 SECURITY: User ${receiverId} trying to access edited message that belongs to user ${oldMessage.userId}`);
+            return;
+          }
+
+          // Сохраняем старый текст ПЕРЕД обновлением базы
+          const oldText = oldMessage.text;
+
           // ОБНОВЛЯЕМ В БАЗЕ ВСЕ сообщения
           await this.messagesCollection.messageEdited(
             message_id,
-            oldMessage.text,
+            oldText, // передаем старый текст для истории
             newMessageText
           );
 
@@ -564,24 +579,19 @@ export class EditedBusinessMessageHandler implements IUpdateHandler {
             return;
           }
 
-          // СРАЗУ отправляем полную информацию об редактировании
-          const editedMessage = await this.messagesCollection.getById(message_id);
-          if (!editedMessage) return;
-
-          const lastEdit = editedMessage.editedMessages[editedMessage.editedMessages.length - 1];
           const text = dedent`
             ✏️ <b>Сообщение отредактировано</b>
             
-            👤 <b>Пользователь:</b> <a href="t.me/${editedMessage.senderUsername || "whocencer"}">${editedMessage.senderName}</a>
-            🆔 <b>ID:</b> <code>${editedMessage.senderId}</code>
-            📅 <b>Отправлено:</b> ${formatDate(editedMessage.sentAt)}
-            ✏️ <b>Отредактировано:</b> ${formatDate(editedMessage.editedAt || Date.now())}
+            👤 <b>Пользователь:</b> <a href="t.me/${oldMessage.senderUsername || "whocencer"}">${oldMessage.senderName}</a>
+            🆔 <b>ID:</b> <code>${oldMessage.senderId}</code>
+            📅 <b>Отправлено:</b> ${formatDate(oldMessage.sentAt)}
+            ✏️ <b>Отредактировано:</b> ${formatDate(Date.now())}
             
             📝 <b>Было:</b>
-            <blockquote>${lastEdit?.oldMessageText || editedMessage.text}</blockquote>
+            <blockquote>${oldText}</blockquote>
             
             📝 <b>Стало:</b>
-            <blockquote>${editedMessage.text}</blockquote>
+            <blockquote>${newMessageText}</blockquote>
           `;
 
           // Отправляем уведомление только для сообщений от других пользователей
